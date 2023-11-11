@@ -68,7 +68,6 @@ grid = read_shapefile(
     threshold = 0.1,
     )
 
-# XXX_AP_9/28/23 - simpler way to calculate Q. This replaces the whole excel file, right?
 grid.at_link["discharge"]= grid.at_link["drainage_area"]*(230/np.max(grid.at_link["drainage_area"])) # 230 m3/s is the discharge value used in your calculations, I believe, though check me!
 
 # Access the coordinates: finding the x coordinates of the nodes in the network
@@ -122,8 +121,8 @@ for d in range ((len(area_link)-1)):
     diff_area = area_link[d] - area_link[d+1]
     diff_area_at_each_link.append(diff_area)
 #to calculate flow depth
-# XXX_AP_9/28/23 - an appropriate Manning's n for this river would be somewhat higher, I suspect. Interested to see what the gauge data say... and/or chat with Telly- he did a bunch of thinking about this for Big Ck
-Mannings_n = 0.08 #0.1734 #median calculated from Suiattle gages (units m^3/s)
+
+Mannings_n = 0.086 #0.1734 #median calculated from Suiattle gages (units m^3/s)
 grid.at_link["flow_depth"] = ((Mannings_n*grid.at_link["discharge"])/ ((slope**0.5)*width))**0.6
 
 depth = grid.at_link["flow_depth"].copy()
@@ -158,7 +157,7 @@ plt.show()
 
 
 # #TAU
-# rho = 1000
+#rho = 1000
 # gravity = 9.81
 # tau = rho * gravity * depth * slope
 # plt.figure()
@@ -178,7 +177,7 @@ plt.show()
 #creating sediment parcels in the DATARECORD
 
 slope_depend_Shields = 0.15* slope**0.25
-tau_c_multiplier = 1.0 #default is 1.0
+tau_c_multiplier = 2.5#to change grain size
 tau_c_50 = slope_depend_Shields
 median_number_of_starting_parcels = 100
 
@@ -188,12 +187,19 @@ initialize_parcels = BedParcelInitializerDepth(
     tau_c_50 = slope_depend_Shields,
     tau_c_multiplier = tau_c_multiplier,
     median_number_of_starting_parcels = 100,
-    extra_parcel_attributes = ["source"]
+    extra_parcel_attributes = ["source", "recycle_destination"]
     )
 
 parcels = initialize_parcels()
+
+#Assigning the extra parcel attributes listed above
 parcels.dataset["source"].values = np.full(parcels.number_of_items, "initial_bed_sed")
+#will be used to track the parcels that are recycled
+parcels.dataset["recycle_destination"].values = np.full(parcels.number_of_items, "not_recycled_ever")
+
+#calculate D50 
 d_50 = (rho_water * depth * slope) / ((rho_sed - rho_water) * tau_c_multiplier * tau_c_50)
+
 # calculation of the initial volume of sediment on each link
 parcels_start_bool = parcels.dataset["time"] == parcels.dataset.time[0].values
 
@@ -208,20 +214,21 @@ aggregate_parcels_at_link_sum(
 
 # Plot and calculation for TAU_star
 rho_sed = 2650
+
 D50_each_link = parcels.calc_aggregate_value(
     xr.Dataset.median, "D", at="link", fill_value=0.0)
-# tau_star = tau/(rho_sed - rho) * gravity * D50_each_link
-# plt.figure()
-# plt.title("Tau_star")
-# plt.plot(dist_upstream, tau_star)
-# plt.ylabel("Shield Stress")
-# plt.xlabel("Distance upstream (km)")
-# plt.show()
+tau_star = tau/((rho_sed - rho_water) * gravity * D50_each_link)
+plt.figure()
+plt.title("Tau_star")
+plt.plot(dist_upstream, tau_star)
+plt.ylabel("Shield Stress")
+plt.xlabel("Distance upstream (km)")
+plt.show()
 
 
 # XXX TIME in the model
 
-timesteps = 100 # number of timesteps
+timesteps = 5 # number of timesteps
 
 #dt = 60*60*24*1  # len of timesteps (1 day)
 dt = 60*60*24*7  # len of timesteps (seconds)
@@ -264,6 +271,7 @@ thickness = ((np.nanmedian(parcels.dataset["volume"].values))*median_number_of_s
 n_recycled_parcels = np.empty(timesteps)
 d_recycled_parcels = np.empty(timesteps)
 time_elapsed = np.empty(timesteps)
+count_recyc = np.empty(timesteps)
 timestep_array = np.arange(timesteps)
 sed_total_vol = np.empty([grid.number_of_links,timesteps])
 sediment_active_percent = np.empty([grid.number_of_links,timesteps])
@@ -272,92 +280,88 @@ num_active_pulse= np.empty([grid.number_of_links,timesteps])
 volume_pulse_at_each_link = np.empty([grid.number_of_links,timesteps])
 D_mean_pulse_each_link= np.empty([grid.number_of_links,timesteps])
 num_pulse_each_link= np.empty([grid.number_of_links,timesteps], dtype=int)
+num_total_parcels_each_link= np.empty([grid.number_of_links,timesteps], dtype=int)
+num_count_recyc_parc= np.empty([grid.number_of_links,timesteps], dtype=int)
 num_recyc_each_link= np.empty([grid.number_of_links,timesteps], dtype=int)
-time_array= np.arange(timesteps)
+time_array= np.arange(1, timesteps + 1)
 
 Pulse_cum_transport = np.ones([num_pulse_parcels,1])*np.nan
 Elev_change = np.empty([grid.number_of_nodes,timesteps]) # use cap first letter to denote 2d 
-
-##adding sediment by recycling
-#identify the indices of parcels that need to be recycled
-# index_initial_bed_sed = np.where(parcels.dataset.source == 'initial_bed_sed')
-# for bed_sed in index_initial_bed_sed:
-#     initial_sed_location = [random.randrange(1, grid.number_of_links, 1) for b_sed in range (parcels.number_of_items)] #will replace with probability rather than random
-#     initial_sed_link = np.squeeze(initial_sed_location)
-    
-#     parcels.dataset.element_id.values[bed_sed,0] = initial_sed_link
- 
-#Duplicate code for adding sediment
-#Difference is that this is trying to add sediment proportional to drainage area
-# Identify the initial bed sediment
-index_initial_bed_sed = np.where(parcels.dataset.source == 'initial_bed_sed')
-num_parcels = parcels.number_of_items
-# Calculate the total sum of area_link
-total_area = sum(area_link)
-
-# Calculate the proportions based on drainage area
-proportions = [area / total_area for area in area_link]
-
-# Calculate the number of elements for each smaller array based on proportions
-num_elements = [int(proportion * num_parcels) for proportion in proportions]
-
-# Calculate the remaining elements
-remaining_elements = num_parcels - sum(num_elements)
-
-# Calculate the number of additional elements to add to each proportion
-additional_elements = np.round(np.array(proportions) * remaining_elements).astype(int)
-
-# Distribute the remaining elements to the proportions with the largest values
-while remaining_elements > 0:
-    max_index = np.argmax(additional_elements)
-    additional_elements[max_index] -= 1
-    num_elements[max_index] += 1
-    remaining_elements -= 1
-
-# Initialize an empty list to store the indices
-indices = []
-
-# Generate indices for each proportion
-for i, num in enumerate(num_elements):
-    indices.extend([i] * num)
-
-indices = np.squeeze(indices)
-
-    
+num_parcels = parcels.number_of_items #total number of parcels in network
+count_recyc_parc = []
       
 for t in range(0, (timesteps*dt), dt):
     #by index of original sediment
     start_time = model_time.time()
+
+    total_number_of_parcels = parcels.dataset.element_id.values[:, -1].astype(int)
+    # XXX
+    
+    #boolean mask of parcels that have left the network
+    mask1 = parcels.dataset.element_id.values[:,-1] == OUT_OF_NETWORK
+    #boolean mask of parcels that are initial bed parcels (no pulse parcels)
+    mask2 = parcels.dataset.source == "initial_bed_sed" 
+    
+    bed_sed_out_network = parcels.dataset.element_id.values[mask1 & mask2, -1] == -2
+    
+    #index of the bed parcels that have left the network
+    index_initial_bed_sed = np.where(bed_sed_out_network == True) 
+    
+    #number of parcels that will be recycled/ similar to n_recycled_parcels below
+    num_bed_parcels = np.size(index_initial_bed_sed)
+
+    # Calculate the total sum of area_link
+    total_area = sum(area_link)
+
+    # Calculate the proportions based on drainage area
+    proportions = [area / total_area for area in area_link]
+
+    # Calculate the number of parcels for each link based on proportions
+    num_recycle_bed = [int(proportion * num_bed_parcels) for proportion in proportions]
+
+    # Calculate the remaining parcels not accounted for by using int above
+    remaining_bed_sed = num_bed_parcels - sum(num_recycle_bed)
+
+    # Calculate the number of additional parcels to add to each proportion
+    additional_bed_sed = np.round(np.array(proportions) * remaining_bed_sed).astype(int)
+
+    # Distribute the remaining parcels to the proportions with the largest values
+    while remaining_bed_sed > 0:
+        max_index = np.argmax(additional_bed_sed)
+        additional_bed_sed[max_index] -= 1
+        num_recycle_bed[max_index] += 1
+        remaining_bed_sed -= 1
+
+    # Initialize an empty list to store the indices
+    indices = []
+
+    # Generate indices for each proportion
+    for i, num in enumerate(num_recycle_bed):
+        indices.extend([i] * num)
+
+    indices = np.squeeze(indices)
+    
+    #current_sum = np.sum(num_recycle_bed)
+    #count_recyc_parc.append(num_recycle_bed)
+    
+    #XXX
+    #figure out how to plot the number of parcels recycled to each link
     
     #adding sediment by recycling
-   #code in nst_test.py
  
-    # mask1 = parcels.dataset.element_id.values[:,-1] == OUT_OF_NETWORK
-    # mask2 = parcels.dataset.source == "initial_bed_sed"
+    n_recycled_parcels[np.int64(t/dt)]=np.sum(parcels.dataset.element_id.values[:,-1] == OUT_OF_NETWORK,-1)
+    d_recycled_parcels[np.int64(t/dt)]=np.mean(parcels.dataset.D.values[parcels.dataset.element_id.values[:,-1] == OUT_OF_NETWORK,-1])
     
-    # parcels.dataset.location_in_link.values[mask1 & mask2] = 0.
-    # parcels.dataset.starting_link.values[mask1 & mask2] = -2 # way to denote it was recycled
-    # parcels.dataset.element_id.values[mask1 & mask2,-1] = 0
     
     # assign the new starting link
     for bed_sed in index_initial_bed_sed:
-        parcels.dataset.element_id.values[bed_sed,0] = indices
+        parcels.dataset.element_id.values[bed_sed, 0] = indices
         recyc_= np.where(parcels.dataset.element_id.values[bed_sed,0] == indices)
+        
         for recycle_destination in indices:
-            parcels.dataset["source"].values[recyc_] = np.full((np.shape(parcels.dataset.element_id.values[bed_sed,0])), "recycle_des %s" %recycle_destination)
-            X = parcels.dataset.element_id.values[bed_sed,0].astype(int)
-            recyc_true = np.where(parcels.dataset.source == "recycle_des %s" %recycle_destination)
-            X = X[recyc_true]
-            
-            aggregate_parcels_at_link_count(
-                num_recyc_each_link[:,np.int64(t/dt)],
-                num_recyc_each_link.shape[0],
-                X,
-                len(X),
-            )
-            sorted_num_recyc = num_recyc_each_link[index_sorted_area_link]
-    
-            #recyc_element_ids, count_recyc_parc = np.unique(X, return_counts=True)
+            parcels.dataset["recycle_destination"].values[recyc_] = np.full(num_bed_parcels, "recycle_des %s" %recycle_destination)
+
+            #recyc_element_ids, count_recyc_parc = np.unique(num_elements, return_counts=True)
             
     nst.run_one_step(dt)
     
@@ -451,17 +455,20 @@ for t in range(0, (timesteps*dt), dt):
         
     if t%((timesteps*dt)/n_lines)==0:        
     
-        # PLOT 1: elevation change through time, on long profile
+        # # PLOT 1: elevation change through time, on long profile
         plt.figure("Tracking elev change")
         
         elev_change = grid.at_node['topographic__elevation']-elev_initial
         
      
         c = next(color)
-       
+        plt.plot(dist_upstream_nodes, elev_change, c=c)
+        plt.xlabel('distance downstream (km)')
+        plt.ylabel('elevation change (m)')
         
+
         #print('plotted at timestep',t/dt)
-    total_number_of_parcels = parcels.number_of_items    
+    #total_number_of_parcels_int = parcels.number_of_items    
     print("Model time: ", t/(60*60*24), "days passed (", t/dt, 'timesteps)')
     print('Elapsed:', (model_time.time() - start_time)/60 ,' minutes')
     
@@ -506,6 +513,8 @@ for t in range(0, (timesteps*dt), dt):
         len(parcels.dataset.active_layer.values[mask_ispulse, -1]),
         parcels.dataset.active_layer.values[mask_ispulse, -1],
     )
+
+    
     sorted_num_active_pulse = num_active_pulse[index_sorted_area_link]
     ## Plot 7: D_MEAN_ACTIVE through time
     active_d_mean [:,np.int64(t/dt)]= nst.d_mean_active
@@ -533,7 +542,7 @@ for t in range(0, (timesteps*dt), dt):
     )
     sorted_D_mean_pulse_each_link = D_mean_pulse_each_link[index_sorted_area_link]
     
-    #PLOT 10: percentage active parcels
+    #PLOT 10: number of pulse parcel each link
     aggregate_parcels_at_link_count(
         num_pulse_each_link[:,np.int64(t/dt)],
         num_pulse_each_link.shape[0],
@@ -541,29 +550,48 @@ for t in range(0, (timesteps*dt), dt):
         len(element_pulse),
     )
     sorted_num_pulse_each_link =  num_pulse_each_link[index_sorted_area_link]
-    
-    
-    
+    # Plot #: number of total parcels each link
+    aggregate_parcels_at_link_count(
+         num_total_parcels_each_link[:,np.int64(t/dt)],
+         num_total_parcels_each_link.shape[0],
+         total_number_of_parcels,
+         len(total_number_of_parcels),
+         
+     )
+    sorted_num_total_parcels_each_link = num_total_parcels_each_link[index_sorted_area_link]
+    #XXX 
+
 parcels_dataframe= parcels.dataset.to_dataframe()
 parcels_dataframe.to_csv('Parcels_data.csv', sep=',', index=True) 
 
 plt.figure()
-plt.plot(area_link, sorted_num_recyc)
-plt.ylabel('Number of recycled parcels')
-plt.xlabel('Drainage Area')
-plt.show()
- 
+plt.plot(area_link, num_recycle_bed, c=c)
+plt.title("count_recyc_parc (Timesteps = %i)" %timesteps)
+plt.xlabel("Drainage area")
+plt.ylabel("Number of recycled parcels")
+plt.savefig('count_recyc_parcpng')
+
+#XXX
+
+# plt.figure()
+# plt.plot(count_recyc)
+# plt.ylabel('Number of recycled parcels')
+# plt.xlabel('Drainage Area')
+# plt.show()
+
+#print("This runs to 1000 timesteps to check if A changes from not being empty")
+
 #Saving a text file of model characteristics
 # Converting the time in seconds to a timestamp
 c_ti = model_time.ctime(os.path.getctime("nst_SuiattleRiver.py"))
 file = open('Suiattle_run_characteristics.txt', 'w')
 model_characteristics = ["This script was created at %s" %c_ti, "This is the tau_c_multiplier %s" %tau_c_multiplier, 
-                         "This is the number of timesteps %s" %timesteps, "The number of days in each timestep is %s" %len_dt,
-                         "The pulse is added at timestep %s" %pulse_time,
-                         "The volume of each pulse parcel is %s" %pulse_parcel_vol, "This is the number of pulse parcels added to the network %s"
-                         %num_pulse_parcels,
-                         "This is the abarsion rate of the pulse %s" % new_abrasion_rate[0],
-                         "The current stage of this code is using Allison message (email) to test if the sediment is being added based on drainage area"]
+                          "This is the number of timesteps %s" %timesteps, "The number of days in each timestep is %s" %len_dt,
+                          "The pulse is added at timestep %s" %pulse_time,
+                          "The volume of each pulse parcel is %s" %pulse_parcel_vol, "This is the number of pulse parcels added to the network %s"
+                          %num_pulse_parcels,
+                          "This is the abarsion rate of the pulse %s" % new_abrasion_rate[0],
+                          "The current stage of this code is using Allison message (email) to test if the sediment is being added based on drainage area"]
 for line in model_characteristics:
 # file.write('%d' % link_len)
     file.write(line)
@@ -657,7 +685,7 @@ plt.pcolor(time_array, dist_upstream, sed_total_vol)
 plt.title("Active parcel volume (Timesteps = %i)" %timesteps)
 plt.xlabel('Timesteps')
 plt.ylabel('Distance from upstream (km)')
-plt.savefig('percentActive(1% abrasion).png')
+plt.savefig('percentActive.png')
 plt.show()
 
 plt.figure()
@@ -666,7 +694,7 @@ plt.colorbar(label='average % active parcels')
 plt.title("Active parcel volume (Timesteps = %i)" %timesteps)
 plt.xlabel('Timesteps')
 plt.ylabel('Distance from upstream (km)')
-plt.savefig('percentActive(1% abrasion).png')
+plt.savefig('percentActive.png')
 plt.show()
 
 #Plot 5
@@ -676,8 +704,42 @@ plt.plot(sorted_num_active_parcels_each_link)
 plt.title("Number of parcels active (Timesteps = %i)" %timesteps)
 plt.xlabel("Link number downstream")
 plt.ylabel("Number of active parcels")
-plt.savefig('ActiveParcel(1% abrasion).png')
+plt.savefig('ActiveParcel.png')
 plt.show()
+
+# XXX
+plt.figure()
+plt.pcolor(time_array, dist_upstream, sorted_num_pulse_each_link)
+plt.title("Number of total pulse parcels (Timesteps = %i)" %timesteps)
+plt.colorbar(label='Num pulse parcel')
+plt.xlabel("Timesteps")
+plt.ylabel("Distance from upstream (km)")
+plt.savefig('Total_pulseParcel.png')
+plt.show()
+
+plt.figure()
+plt.pcolor(time_array, dist_upstream, sorted_num_total_parcels_each_link)
+plt.title("Number of total parcels (Timesteps = %i)" %timesteps)
+plt.colorbar(label='Number of parcels')
+plt.xlabel("Timesteps")
+plt.ylabel("Distance from upstream (km)")
+plt.savefig('TotalParcel.png')
+plt.show()
+
+
+fig, ax1 = plt.subplots()
+ax2 = ax1.twinx()
+
+ax1.plot(dist_upstream, D50_each_link,'-', color='k')
+ax2.plot(dist_upstream, sorted_num_total_parcels_each_link,'-', color='brown') #,'.' makes it a dot chart, '-' makes line chart
+
+ax1.set_xlabel("Distance from upstream (km)")
+ax1.set_ylabel("D50", color='k')
+plt.title("Number of parcels and the grain size (Timesteps = %i)" %timesteps)
+ax2.set_ylabel("Number of total parcels", color='brown')
+plt.savefig('RSm (1% abrasion).png')
+plt.show()
+
 #%%
 #Plot 6
 #what is the  number of pulse parcels in the active layer

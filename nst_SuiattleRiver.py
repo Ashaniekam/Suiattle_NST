@@ -13,6 +13,7 @@ Goal: Sort out new Suiattle shapefile issues
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
+from matplotlib.colors import LogNorm
 import numpy as np
 import pandas as pd
 import os
@@ -47,7 +48,14 @@ OUT_OF_NETWORK = NetworkModelGrid.BAD_INDEX - 1
 # #### version #######
 version = "new"
 
-with_abrasion = 0
+scenario = 1
+#scenario_1_path= os.path.join("C:\Users\longrea\OneDrive - Western Washington University\Thesis\Plots\Scenario 1")
+#with_abrasion = "SHRS proxy"
+#with_abrasion = "tumber_correction_2"
+#with_abrasion = "none"
+
+#density_values = "constant"
+#density_values = "SHRS proxy"
 
 #read in shapefiles
 shp_file = os.path.join(os.getcwd (), ("Suiattle_river_"+version+".shp"))
@@ -177,7 +185,7 @@ plt.show()
 #creating sediment parcels in the DATARECORD
 
 slope_depend_Shields = 0.15* slope**0.25
-tau_c_multiplier = 2.5#to change grain size
+tau_c_multiplier = 2.4 #to change grain size
 tau_c_50 = slope_depend_Shields
 median_number_of_starting_parcels = 100
 
@@ -225,6 +233,26 @@ plt.ylabel("Shield Stress")
 plt.xlabel("Distance upstream (km)")
 plt.show()
 
+#find line of best fit
+a, b = np.polyfit(dist_upstream, D50_each_link, 1)
+str_tau_c_multiplier = str(tau_c_multiplier)
+plt.figure()
+plt.scatter(dist_upstream, D50_each_link)
+plt.plot(dist_upstream, a*dist_upstream+b)  
+plt.ylabel("D50 each link")
+plt.title("d50 each link (tau_c_multiplier = " + str_tau_c_multiplier +")")
+plt.xlabel("Distance upstream (km)")
+plt.show()
+
+a, b = np.polyfit(dist_upstream, d_50, 1)
+str_tau_c_multiplier = str(tau_c_multiplier)
+plt.figure()
+plt.scatter(dist_upstream, d_50)
+plt.plot(dist_upstream, a*dist_upstream+b)  
+plt.ylabel("D50")
+plt.title("d50 (tau_c_multiplier = " + str_tau_c_multiplier +")")
+plt.xlabel("Distance upstream (km)")
+plt.show()
 
 # XXX TIME in the model
 
@@ -370,7 +398,7 @@ for t in range(0, (timesteps*dt), dt):
         print('making a pulse')
         print('t = ',t, ',timestep = ', t/dt)
         
-        pulse_location = [random.randrange(17, 22, 1) for i in range(num_pulse_parcels)] #code from nst_test.py: adding pulse randomly near the fan
+        pulse_location = [random.randrange(17, 38, 1) for i in range(num_pulse_parcels)] #code from nst_test.py: adding pulse randomly near the fan
         newpar_element_id = pulse_location
         newpar_element_id = np.expand_dims(newpar_element_id, axis=1)
         
@@ -391,20 +419,28 @@ for t in range(0, (timesteps*dt), dt):
         new_active_layer = np.zeros(
             np.shape(newpar_element_id)
         )  # 1 = active/surface layer; 0 = subsurface layer
-        
-        new_density = 2650 * np.ones(np.size(newpar_element_id))  # (kg/m3)
+        if scenario <= 4:
+            new_density = 2200 * np.ones(np.size(newpar_element_id))  # (kg/m3)
+        else:
+            new_density = (np.random.uniform(1500, 2750, size=(np.size(newpar_element_id)))) * np.ones(np.size(newpar_element_id)) #distribution from SHRS PROXY fron Figure1 in Pfeiffer_et_al_2022: Survival of the strong and dense
         
         new_location_in_link = np.random.rand(
             np.size(newpar_element_id), 1
         )
-        if with_abrasion == 1: 
-            new_abrasion_rate = 0.00004 * np.ones(np.size(newpar_element_id)) 
+        if scenario == 1 or scenario == 5:
+            new_abrasion_rate = 0 * np.ones(np.size(newpar_element_id))
+        elif scenario == 2 or scenario == 6:
+            new_abrasion_rate = 0.000003 * np.ones(np.size(newpar_element_id)) #0.3 % mass loss per kilometer
+        elif scenario == 3 or scenario == 7: 
+            new_abrasion_rate = (np.random.uniform(0.0016, 1.6, size=(np.size(newpar_element_id))))* np.ones(np.size(newpar_element_id)) #tumbler correction 2
         else: 
             new_abrasion_rate = 0 * np.ones(np.size(newpar_element_id))
+        
             
-        new_D = np.random.lognormal(np.log(0.03),np.log(1.5),np.shape(newpar_element_id))  
+            
+        new_D= np.random.lognormal(np.log(0.09),np.log(1.5),np.shape(newpar_element_id))    
         # (m) the diameter of grains in each parcel
-        #original::  new_D = np.random.lognormal(np.log(0.03),np.log(3),np.shape(newpar_element_id))
+        #original::  new_D = np.random.lognormal(np.log(0.03 "D50"),np.log(3),np.shape(newpar_element_id))
 
         newpar_grid_elements = np.array(
             np.empty(
@@ -463,8 +499,9 @@ for t in range(0, (timesteps*dt), dt):
      
         c = next(color)
         plt.plot(dist_upstream_nodes, elev_change, c=c)
-        plt.xlabel('distance downstream (km)')
-        plt.ylabel('elevation change (m)')
+        plt.xlabel('Distance downstream (km)')
+        plt.title("Elevation change each timestep")
+        plt.ylabel('Elevation change (m)')
         
 
         #print('plotted at timestep',t/dt)
@@ -566,10 +603,10 @@ parcels_dataframe.to_csv('Parcels_data.csv', sep=',', index=True)
 
 plt.figure()
 plt.plot(area_link, num_recycle_bed, c=c)
-plt.title("count_recyc_parc (Timesteps = %i)" %timesteps)
+plt.title("count_recyc_parc (Scenario = %i)" %scenario)
 plt.xlabel("Drainage area")
 plt.ylabel("Number of recycled parcels")
-plt.savefig('count_recyc_parcpng')
+plt.savefig('count_recyc_parcpng (Scenario 1)')
 
 #XXX
 
@@ -585,12 +622,12 @@ plt.savefig('count_recyc_parcpng')
 # Converting the time in seconds to a timestamp
 c_ti = model_time.ctime(os.path.getctime("nst_SuiattleRiver.py"))
 file = open('Suiattle_run_characteristics.txt', 'w')
-model_characteristics = ["This script was created at %s" %c_ti, "This is the tau_c_multiplier %s" %tau_c_multiplier, 
+model_characteristics = ["This script was created at %s" %c_ti, "This code is running for scenario %s" %scenario,  "This is the tau_c_multiplier %s" %tau_c_multiplier, 
                           "This is the number of timesteps %s" %timesteps, "The number of days in each timestep is %s" %len_dt,
                           "The pulse is added at timestep %s" %pulse_time,
                           "The volume of each pulse parcel is %s" %pulse_parcel_vol, "This is the number of pulse parcels added to the network %s"
                           %num_pulse_parcels,
-                          "This is the abarsion rate of the pulse %s" % new_abrasion_rate[0],
+                          
                           "The current stage of this code is using Allison message (email) to test if the sediment is being added based on drainage area"]
 for line in model_characteristics:
 # file.write('%d' % link_len)
@@ -624,9 +661,9 @@ elev_change_at_link = ((final_vol_on_link - initial_vol_on_link) /
 links=np.arange(grid.number_of_links)
 plt.figure()
 plt.plot(elev_change_at_link)
-plt.title("Change in elevation through time (Timesteps = %i)" %timesteps)
+plt.title("Change in elevation through time (Scenario = %i)" %scenario)
 plt.ylabel("Elevation change (m)")
-plt.savefig('TrackElevChangev2 (1% abrasion).png')
+plt.savefig('TrackElevChangev2 (Scenario 1).png')
 
 #Plot 2
 # #### Tracking the output: are we at (or near) steady state?  ####
@@ -638,30 +675,30 @@ ax2.plot(timestep_array, n_recycled_parcels,'-', color='k') #,'.' makes it a dot
 
 ax1.set_xlabel("Timesteps")
 ax1.set_ylabel("Mean D recycled parcels (m)", color='k')
-plt.title("Recycled parcels (Timesteps = %i)" %timesteps)
+plt.title("Recycled parcels (Scenario = %i)" %scenario)
 ax2.set_ylabel("Number of recycled parcels", color='brown')
-plt.savefig('Recycled (1% abrasion).png')
+plt.savefig('Recycled (Scenario 1).png')
 plt.show()
 
-link_len = np.mean(grid.length_of_link)
+link_len = grid.length_of_link
 
 #Plot 3
 # ####  How far is the pulse material transporting?    ####
 
 d_percent_loss = (parcels.dataset.D.values[mask_ispulse,-1] - new_D[:,0])/new_D[:,0]
 plt.scatter(parcels.dataset["D"].values[-num_pulse_parcels:,-1],Pulse_cum_transport[:,-1],10,d_percent_loss, vmin=-0.1, vmax=-0.6)
-plt.title("How far is the pulse material transporting? (Timesteps = %i)" %timesteps)
+plt.title("How far is the pulse material transporting? (Scenario = %i)" %scenario)
 plt.ylabel('Pulse parcel cumulative transport distance (m)')
 plt.xlabel('D (m)')
 plt.colorbar(label='Percentage of grains loss (%)')
 plt.ylim(0, 100000)
 # reference lines
-plt.axhline(y = link_len, color = 'grey', linestyle = ':') # plot a horizontal line
-plt.text(0.06,link_len*1.1,'one link length')
+plt.axhline(y = link_len[0], color = 'grey', linestyle = ':') # plot a horizontal line
+plt.text(0.06,link_len[0]*1.1,'one link length')
 
-plt.axhline(y = link_len*grid.number_of_links, color = 'grey', linestyle = ':') # plot a horizontal line
-plt.text(0.06,link_len*grid.number_of_links*0.95,'full channel length')
-plt.savefig('DistTravelPulse(1% abrasion).png')
+plt.axhline(y = np.sum(link_len), color = 'grey', linestyle = ':') # plot a horizontal line
+plt.text(0.06,link_len[170]*grid.number_of_links*0.95,'full channel length')
+plt.savefig('DistTravelPulse(Scenario 1).png')
 plt.show()
 
 #Plot 4
@@ -671,8 +708,8 @@ nonzero_travel_dist = travel_dist[travel_dist>0]
 plt.hist(np.log10(nonzero_travel_dist),30) # better to make log-spaced bins...
 plt.xlabel('log10( Cum. parcel travel distance (m) )')
 plt.ylabel('Number of non-pulse parcels')
-plt.title("How far have the non-pulse parcels traveled in total? (Timesteps = %i)" %timesteps)
-plt.savefig('DistTravelNonPulse(1% abrasion).png')
+plt.title("How far have the non-pulse parcels traveled in total? (Scenario = %i)" %scenario)
+plt.savefig('DistTravelNonPulse(Scenario 1).png')
 plt.text(2,50, 'n = '+str(len(nonzero_travel_dist))+' parcels')
 # %%
 
@@ -682,48 +719,48 @@ plt.figure()
 
 #plt.plot(grid.at_link["dist_upstream"],sediment_active_percent)
 plt.pcolor(time_array, dist_upstream, sed_total_vol)
-plt.title("Active parcel volume (Timesteps = %i)" %timesteps)
+plt.title("Active parcel volume (Scenario = %i)" %scenario)
 plt.xlabel('Timesteps')
 plt.ylabel('Distance from upstream (km)')
-plt.savefig('percentActive.png')
+plt.savefig('percentActive (Scenario 1).png')
 plt.show()
 
 plt.figure()
 plt.pcolor(time_array, dist_upstream,sediment_active_percent)
 plt.colorbar(label='average % active parcels')
-plt.title("Active parcel volume (Timesteps = %i)" %timesteps)
+plt.title("Active parcel volume (Scenario = %i)" %scenario)
 plt.xlabel('Timesteps')
 plt.ylabel('Distance from upstream (km)')
-plt.savefig('percentActive.png')
+plt.savefig('percentActive (Scenario 1).png')
 plt.show()
 
 #Plot 5
 #what is the number of parcels active per link
 plt.figure()
 plt.plot(sorted_num_active_parcels_each_link)
-plt.title("Number of parcels active (Timesteps = %i)" %timesteps)
+plt.title("Number of parcels active (Scenario = %i)" %scenario)
 plt.xlabel("Link number downstream")
 plt.ylabel("Number of active parcels")
-plt.savefig('ActiveParcel.png')
+plt.savefig('ActiveParcel (Scenario 1).png')
 plt.show()
 
 # XXX
 plt.figure()
 plt.pcolor(time_array, dist_upstream, sorted_num_pulse_each_link)
-plt.title("Number of total pulse parcels (Timesteps = %i)" %timesteps)
+plt.title("Number of total pulse parcels (Scenario = %i)" %scenario)
 plt.colorbar(label='Num pulse parcel')
 plt.xlabel("Timesteps")
 plt.ylabel("Distance from upstream (km)")
-plt.savefig('Total_pulseParcel.png')
+plt.savefig('Total_pulseParcel (Scenario 1).png')
 plt.show()
 
 plt.figure()
 plt.pcolor(time_array, dist_upstream, sorted_num_total_parcels_each_link)
-plt.title("Number of total parcels (Timesteps = %i)" %timesteps)
+plt.title("Number of total parcels (Scenario = %i)" %scenario)
 plt.colorbar(label='Number of parcels')
 plt.xlabel("Timesteps")
 plt.ylabel("Distance from upstream (km)")
-plt.savefig('TotalParcel.png')
+plt.savefig('TotalParcel (Scenario 1).png')
 plt.show()
 
 
@@ -735,9 +772,9 @@ ax2.plot(dist_upstream, sorted_num_total_parcels_each_link,'-', color='brown') #
 
 ax1.set_xlabel("Distance from upstream (km)")
 ax1.set_ylabel("D50", color='k')
-plt.title("Number of parcels and the grain size (Timesteps = %i)" %timesteps)
+plt.title("Number of parcels and the grain size (Scenario = %i)" %scenario)
 ax2.set_ylabel("Number of total parcels", color='brown')
-plt.savefig('RSm (1% abrasion).png')
+plt.savefig('RSm (Scenario 1).png')
 plt.show()
 
 #%%
@@ -750,11 +787,11 @@ num_active_pulse_nozero[num_active_pulse_nozero == 0]= np.nan
 
 
 plt.pcolor(time_array, dist_upstream, num_active_pulse_nozero, cmap= 'winter_r')
-plt.title("How far is the pulse material transporting? (Timesteps = %i)" %timesteps)
+plt.title("How far is the pulse material transporting? (Scenario = %i)" %scenario)
 plt.colorbar(label='Number of active pulse parcels')
 plt.xlabel("Timesteps")
 plt.ylabel("Distance from upstream (km)")
-plt.savefig('ActivePluse(1% abrasion).png', dpi=700)
+plt.savefig('ActivePluse(Scenario 1).png', dpi=700)
 plt.show()
 #%%
 
@@ -762,12 +799,12 @@ plt.show()
 #what is d_mean_active downstream
 plt.figure()
 plt.pcolor(time_array, dist_upstream, active_d_mean)
-plt.title("What is the mean grain size through time? (Timesteps = %i)" %timesteps)
+plt.title("What is the mean grain size through time? (Scenario = %i)" %scenario)
 
 plt.colorbar(label='Mean grain size (m)')
 plt.xlabel("Timesteps")
 plt.ylabel("Link downstream")
-plt.savefig('ActiveDmean(1% abrasion).png')
+plt.savefig('ActiveDmean(Scenario 1).png')
 plt.show()
 
 #%% #plot8: Volume of pulse parcels through time 
@@ -776,24 +813,24 @@ vol_pulse_nozero = sorted_volume_pulse_at_each_link.copy()
 vol_pulse_nozero[vol_pulse_nozero == 0]= np.nan
 plt.pcolor(time_array, dist_upstream,vol_pulse_nozero, cmap= 'plasma_r', vmin=0, vmax=5000)
 plt.colorbar(label='Volume of pulse parcels ($m^3$)')
-plt.title("Volume of pulse parcel through time (Timesteps = %i)" %timesteps)
+plt.title("Volume of pulse parcel through time (Scenario = %i)" %scenario)
 plt.xlabel("Timesteps")
 plt.ylabel("Distance from upstream (km)")
-plt.savefig('Vol_pluse(1% abrasion).png', dpi=700)
+plt.savefig('Vol_pluse(Scenario 1).png', dpi=700)
 plt.show()
 
 #PLOT 9: D mean of pulse at each link
 plt.figure()
 D_mean_pulse_each_link_nozero= sorted_D_mean_pulse_each_link.copy()
 D_mean_pulse_each_link_nozero[D_mean_pulse_each_link_nozero == 0]= np.nan
-plt.pcolor(time_array, dist_upstream, D_mean_pulse_each_link_nozero, cmap= 'winter_r', vmin=0.0, vmax=0.10)
+plt.pcolor(time_array, dist_upstream, D_mean_pulse_each_link_nozero, norm=LogNorm(), cmap= 'winter_r', vmin=0.0, vmax=0.10)
 #plt.title("Dmean of pulse parcel through time (1% abrasion)")
 #norm=colors.LogNorm(vmin=.01, vmax=.1),
 plt.colorbar(label='Mean grain size of pulse parcels (m)')
-plt.title("Dmean grain size through time (Timesteps = %i)" %timesteps)
+plt.title("Dmean grain size through time (Scenario = %i)" %scenario)
 plt.xlabel("Timesteps")
 plt.ylabel("Distance from upstream (km)")
-plt.savefig('Dmean_pluse(1% abrasion).png', dpi=700)
+plt.savefig('Dmean_pluse(Scenario 1).png', dpi=700)
 plt.show()
 
 #PLOT 10: percentage active parcels
@@ -802,10 +839,10 @@ percent_active= num_active_pulse/ num_pulse_each_link
 sorted_percent_active = percent_active[index_sorted_area_link] 
 plt.pcolor(time_array, dist_upstream, sorted_percent_active, cmap= 'Wistia', vmin=0.0, vmax=1.0)
 plt.colorbar(label='Percentage of active pulse parcels (%)')
-plt.title("Percentage active pulse parcels (Timesteps = %i)" %timesteps)
+plt.title("Percentage active pulse parcels (Scenario = %i)" %scenario)
 plt.xlabel("Timesteps")
 plt.ylabel("Distance from upstream (km)")
-plt.savefig('percent_active_pulse(1% abrasion).png', dpi=700)
+plt.savefig('percent_active_pulse(Scenario 1).png', dpi=700)
 plt.show()
 #%%
 
@@ -813,8 +850,8 @@ plt.show()
 plt.figure(" Track elev change")
 plt.pcolor(time_array, dist_upstream_nodes, Elev_change, shading='auto', norm=colors.CenteredNorm(), cmap='coolwarm') 
 plt.colorbar(label='Elevation change from initial (m)')
-plt.title("Elevation change through time (Timesteps = %i)" %timesteps)
+plt.title("Elevation change through time (Scenario = %i)" %scenario)
 plt.xlabel('Timesteps')
 plt.ylabel('Distance from upstream (km)')
-plt.savefig('TrackElevChange(1% abrasion).png', dpi=700)
+plt.savefig('TrackElevChange(Scenario 1).png', dpi=700)
 plt.show()

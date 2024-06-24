@@ -641,7 +641,7 @@ model_characteristics = ["This script was created at %s" %c_ti, "This code is ru
                           "The volume of each pulse parcel is %s" %pulse_parcel_vol, "This is the number of pulse parcels added to the network %s"
                           %total_num_pulse_parcels,
                           
-                          "The current stage of this code is using Allison message (email) to test if the sediment is being added based on drainage area"]
+                          "The current stage of this code is editing variables to be normalized since steady state."]
 for line in model_characteristics:
     file.write(line)
     file.write('\n')

@@ -2,29 +2,11 @@
 """
 Created on Mon Jun 17 12:25:51 2024
 
-@author: longrea
+This code models sediment transport and downstream sediment pulse evolution in the
+Suiattle River using the Landlab Network Sediment Transporter. 
+
+@authors: longrea, pfeiffea
 """
-
-# -*- coding: utf-8 -*-
-"""
-Spyder Editor
-
-This is the code for my thesis on the Suiattle River
-
-
-Tasks 6-18-24:
-    - Sorting!! eek. Any variable that is sorted needs to have _DS as the suffix
-   
-
-
-
-
-@author: longrea, pfeiffea
-
-Goal: Sort out new Suiattle shapefile issues
-
-"""
-
 
 import matplotlib.pyplot as plt
 import matplotlib
@@ -44,8 +26,6 @@ import scipy.constants
 from landlab.components import (
     FlowDirectorSteepest,
     NetworkSedimentTransporter,
-    SedimentPulserEachParcel,
-    SedimentPulserAtLinks,
     FlowAccumulator,
     BedParcelInitializerDepth,
 )
@@ -87,8 +67,6 @@ dt = 60*60*24*1  # len of timesteps (1 day)
 new_dir_name = model_state
 new_dir = pathlib.Path('C:/Users/longrea/OneDrive - Western Washington University/Thesis/1_Code/Results and plots', new_dir_name)
 new_dir.mkdir(parents=True, exist_ok=True)
-
-
 
 # %% ##### Set up the grid, channel characteristics #####
 shp_file = os.path.join(os.getcwd (), ("Suiattle_river.shp"))
@@ -181,7 +159,7 @@ parcels.dataset["source"].values = np.full(parcels.number_of_items, "initial_bed
 parcels.dataset["recycle_destination"].values = np.full(parcels.number_of_items, "not_recycled_ever")
 #parcels.dataset["change_D"].values = np.zeros(np.shape(parcels.number_of_items))
 
-
+()
 # calculation of the initial volume of sediment on each link
 
 initial_vol_on_link = np.empty(number_of_links, dtype = float)
@@ -313,8 +291,6 @@ for t in range(0, (timesteps*dt), dt):
     bed_sed_out_network = parcels.dataset.element_id.values[mask1 & mask2, -1] == -2
     
     
-    
-    
     # ###########   Parcel recycling by drainage area    ###########
     
     #index of the bed parcels that have left the network
@@ -373,7 +349,7 @@ for t in range(0, (timesteps*dt), dt):
     # #### another day passed... #####
     
     
-                ########## Making a pulse #############
+    ########## Adding a pulse #############
     if t==dt*pulse_time: 
         print('making a pulse')
         print('t = ',t, ',timestep = ', t/dt)
@@ -388,8 +364,6 @@ for t in range(0, (timesteps*dt), dt):
         total_num_pulse_parcels = int(np.sum(num_pulse_parcels_by_vol))
         pulse_location = [index for index, freq in enumerate((num_pulse_parcels_by_vol).astype(int), start=7) for _ in range(freq)]
         random.shuffle(pulse_location)
-        
-        
         
         newpar_element_id = pulse_location
         newpar_element_id = np.expand_dims(newpar_element_id, axis=1)
@@ -424,9 +398,7 @@ for t in range(0, (timesteps*dt), dt):
 
         SHRS_distribution = np.random.normal(SHRS_MEAN, SHRS_STDEV, (np.size(newpar_element_id)))
 
-
         measured_alphas = 3.0715*np.exp(-0.136*SHRS_distribution) # units: 1/km
-         
 
         tumbler_2 = 2 * (3.0715*np.exp(-0.136*SHRS_distribution))
         tumbler_4 = 4 * (3.0715*np.exp(-0.136*SHRS_distribution))
@@ -436,16 +408,15 @@ for t in range(0, (timesteps*dt), dt):
             new_density = 2650 * np.ones(np.size(newpar_element_id))  # (kg/m3) standard
             print('Scenario 1 pulse: no abrasion')
         elif scenario == 2:
-            new_abrasion_rate = (measured_alphas/1000)* np.ones(np.size(newpar_element_id)) #0.3 % mass loss per METER
+            new_abrasion_rate = (measured_alphas/1000)* np.ones(np.size(newpar_element_id)) # mass loss per METER
             new_density = 894.978992640976*np.log(SHRS_distribution)-1156.7599235065895
             print('Scenario 2 pulse: variable abrasion, SH proxy')
         elif scenario == 3: 
-            new_abrasion_rate = (tumbler_4/1000)* np.ones(np.size(newpar_element_id)) #tumbler correction 4 !!!!
+            new_abrasion_rate = (tumbler_4/1000)* np.ones(np.size(newpar_element_id)) #tumbler correction 4 
             new_density = 894.978992640976*np.log(SHRS_distribution)-1156.7599235065895
         else: 
             new_abrasion_rate = (tumbler_4/1000) * np.ones(np.size(newpar_element_id))
          
-        
         new_D= np.random.lognormal(np.log(0.09),np.log(1.5),np.shape(newpar_element_id))    # (m) the diameter of grains in each pulse parcel 
         
         newpar_grid_elements = np.array(
@@ -469,8 +440,6 @@ for t in range(0, (timesteps*dt), dt):
             "location_in_link": (["item_id", "time"], new_location_in_link),
             "D": (["item_id", "time"], new_D),
             "volume": (["item_id", "time"], new_volume),
-            
-    
             }
         
         parcels.add_item(
@@ -479,15 +448,15 @@ for t in range(0, (timesteps*dt), dt):
                 new_item_spec = new_variables
         )
         
-#%% #Calculate Variables and tracking timesteps
+#%% #Calculate variables and tracking timesteps
     if t == parcels.dataset.time[0].values: # if we're at the first timestep
 
         avg_init_sed_thickness = np.mean(
             grid.at_node['topographic__elevation'][:-1]-grid.at_node['bedrock__elevation'][:-1])        
         grid.at_node['bedrock__elevation'][-1]=grid.at_node['bedrock__elevation'][-1]+avg_init_sed_thickness
 
-
         elev_initial = grid.at_node['topographic__elevation'].copy()
+
     Elev_change[:,np.int64(t/dt)] = grid.at_node['topographic__elevation']-elev_initial
 
     #Tracking timesteps
@@ -511,7 +480,6 @@ for t in range(0, (timesteps*dt), dt):
     #boolean mask of pulse parcels' volumes
     volume_of_pulse = parcels.dataset.volume.values[mask_ispulse,-1]
     
-    
     #Calculating transport capacity
     active_parcels = parcels.dataset.element_id.values[mask_active,-1].astype(int) #array of active parcels' element IDs
     parcel_volume = parcels.dataset.volume.values[:, -1] #parcel volume
@@ -527,7 +495,6 @@ for t in range(0, (timesteps*dt), dt):
     # Convert weighted-mean velocity to m/s
     transport_capacity [:,np.int64(t/dt)]= weighted_mean_velocity * nst._active_layer_thickness * width  #multiply by active layer thickness and link width 
    
-    
     # Calculating volume of pulse that remains after abrasion
     volume_of_pulse = parcels.dataset.volume.values[mask_ispulse,-1]
 
@@ -552,7 +519,6 @@ for t in range(0, (timesteps*dt), dt):
     )
     
     sorted_num_active_parcels_each_link = num_active_parcels_each_link[index_sorted_area_link]
-    
     
     volume_at_each_link[:,np.int64(t/dt)]= aggregate_items_as_sum(
         element_all_parcels,

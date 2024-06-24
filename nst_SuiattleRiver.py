@@ -487,13 +487,7 @@ def run_scenario(scenario):
                 np.shape(newpar_element_id)
             )  # 1 = active/surface layer; 0 = subsurface layer
             
-           
-            
-            
-            
-            
-        
-            
+
             new_location_in_link = np.random.rand(
                 np.size(newpar_element_id), 1
             )

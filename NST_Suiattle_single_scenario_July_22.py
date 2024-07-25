@@ -93,7 +93,7 @@ new_dir.mkdir(parents=True, exist_ok=True)
 shp_file = os.path.join(os.getcwd (), ("Suiattle_river.shp"))
 points_shapefile = os.path.join(os.getcwd(), ("Suiattle_nodes.shp"))
 
-Suiattle_Dem = np.loadtxt("10m_hillshade_suia.asc", skiprows=6)
+#Suiattle_Dem = np.loadtxt("10m_hillshade_suia.asc", skiprows=6)
 
 
 grid = read_shapefile(
@@ -923,13 +923,13 @@ plot_name = str(new_dir) + "/" + 'NST_ELEVCHANGE(Scenario' + str(scenario_num) +
 fig.savefig(plot_name, bbox_inches='tight', dpi=700)
 
 
-fig, ax = plt.subplots(figsize=(10, 8))
-Suiattle_Dem = np.array(Suiattle_Dem)  # Ensure `Suiattle_Dem` is a NumPy array
-im_dem = ax.imshow(Suiattle_Dem, cmap='gist_gray', vmin=np.min(Suiattle_Dem), vmax=np.max(Suiattle_Dem))
-plt.colorbar(im_dem, ax=ax, label="Elevation (m)")
-plt.title("Suiattle DEM")
-plt.xlabel("Longitude")
-plt.ylabel("Latitude")
+# fig, ax = plt.subplots(figsize=(10, 8))
+# Suiattle_Dem = np.array(Suiattle_Dem)  # Ensure `Suiattle_Dem` is a NumPy array
+# im_dem = ax.imshow(Suiattle_Dem, cmap='gist_gray', vmin=np.min(Suiattle_Dem), vmax=np.max(Suiattle_Dem))
+# plt.colorbar(im_dem, ax=ax, label="Elevation (m)")
+# plt.title("Suiattle DEM")
+# plt.xlabel("Longitude")
+# plt.ylabel("Latitude")
 
 # fig.savefig(plot_name, bbox_inches='tight', dpi=700)
 

@@ -104,9 +104,6 @@ if not os.path.exists(output_folder):
 shp_file = os.path.join(os.getcwd (), ("Suiattle_river.shp"))
 points_shapefile = os.path.join(os.getcwd(), ("Suiattle_nodes.shp"))
 
-Suiattle_Dem = np.loadtxt("10m_hillshade_suia.asc", skiprows=6)
-parcels_path = r"C:\Users\longrea\OneDrive - Western Washington University\Thesis\1_Code\Suiattle Code v2\Results-Steady Statetruncated run_no_abrasion\Steady Statetruncated run_no_abrasion--parcels.pickle"
-
 
 grid = read_shapefile(
     shp_file,

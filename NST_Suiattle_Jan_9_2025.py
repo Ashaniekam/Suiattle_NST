@@ -104,6 +104,9 @@ if not os.path.exists(output_folder):
 shp_file = os.path.join(os.getcwd (), ("Suiattle_river.shp"))
 points_shapefile = os.path.join(os.getcwd(), ("Suiattle_nodes.shp"))
 
+Suiattle_Dem = np.loadtxt("10m_hillshade_suia.asc", skiprows=6)
+parcels_path = r"C:\Users\longrea\OneDrive - Western Washington University\Thesis\1_Code\Suiattle Code v2\Results-Steady Statetruncated run_no_abrasion\Steady Statetruncated run_no_abrasion--parcels.pickle"
+
 
 grid = read_shapefile(
     shp_file,
@@ -393,11 +396,7 @@ sorted_scaled_gsd = np.sort(scaled_gsd)
 scaled_count = np.linspace(0,100,len(scaled_gsd))
 
 ######
-coefficients = np.polyfit(np.log(sorted_scaled_gsd),scaled_count, 1)
 
-slope_of_line, intercept = coefficients
-
-Cum_finer = np.linspace(0,100,scaled_size)
 
 # best fit: y_fit = slope_of_line * np.log(sorted_scaled_gsd) + intercept
 
@@ -590,6 +589,37 @@ for t in range(0, (timesteps*dt), dt):
                 mask_pulse = np.full(len(newpar_element_id),False)
                 mask_pulse = mask_pulse[:total_num_initial_pulse_parcels]==True
                 
+                #TRYING TO FIX 2 PROBLEMS:
+                    # 1: pulse is not being added proportional to fan thickness out the gate
+                    # 2: after the first pulse, if the thickness in a fan link exceeds its defined thickness, no pulse parcels should be added until parcels
+                    # moved out of that link
+                
+                counts = np.array([np.sum(new_starting_link == loc) for loc in fan_location])
+                target_counts = (fan_proportions * total_num_initial_pulse_parcels).astype(int)
+                
+                pulse_remainder = total_num_initial_pulse_parcels - target_counts.sum()
+
+                # Add the remainder to the largest element in pulse_each_link
+                target_counts[np.argmax(fan_proportions)] += pulse_remainder
+
+                # Step 3: Adjust starting_link to match target_counts
+                adjusted_link = []
+
+                for loc, current_count, target_count in zip(fan_location, counts, target_counts):
+                    if current_count > target_count:  # Remove excess values
+                        indices = np.where(new_starting_link == loc)[0][:target_count]
+                    else:  # Add values to reach the target count
+                        indices = np.where(new_starting_link == loc)[0]
+                        additional_indices = np.random.choice(indices, target_count - current_count, replace=True)
+                        indices = np.concatenate([indices, additional_indices])
+    
+                    adjusted_link.extend(new_starting_link[indices])
+
+                # Convert adjusted_link to an array and ensure it has the correct length
+                new_starting_link = np.array(adjusted_link)[:total_num_initial_pulse_parcels]
+                
+                
+                
                 
                 new_parcels = {"grid_element": newpar_grid_elements[:total_num_initial_pulse_parcels],
                       "element_id": newpar_element_id[:total_num_initial_pulse_parcels]}
@@ -630,6 +660,34 @@ for t in range(0, (timesteps*dt), dt):
                 # Update mask_pulse to include the correct number of parcels
                 mask_pulse = np.full(len(newpar_element_id),False)
                 mask_pulse = mask_pulse[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]
+                
+                
+                #########################################################
+                counts = np.array([np.sum(new_starting_link == loc) for loc in fan_location])
+                target_counts = (fan_proportions * total_num_added_pulse_parcels).astype(int)
+                
+                pulse_remainder = total_num_added_pulse_parcels - target_counts.sum()
+
+                # Add the remainder to the largest element in pulse_each_link
+                target_counts[np.argmax(fan_proportions)] += pulse_remainder
+
+                # Step 3: Adjust starting_link to match target_counts
+                adjusted_link = []
+
+                for loc, current_count, target_count in zip(fan_location, counts, target_counts):
+                    if current_count > target_count:  # Remove excess values
+                        indices = np.where(new_starting_link == loc)[0][:target_count]
+                    else:  # Add values to reach the target count
+                        indices = np.where(new_starting_link == loc)[0]
+                        additional_indices = np.random.choice(indices, target_count - current_count, replace=True)
+                        indices = np.concatenate([indices, additional_indices])
+    
+                    adjusted_link.extend(new_starting_link[indices])
+
+                # Convert adjusted_link to an array and ensure it has the correct length
+                new_starting_link = np.array(adjusted_link)[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]
+                
+                ##########################################
                 
                 
                 new_parcels = {"grid_element": newpar_grid_elements[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse],

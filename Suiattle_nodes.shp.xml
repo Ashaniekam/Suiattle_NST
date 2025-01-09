@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata xml:lang="en"><Esri><CreaDate>20241108</CreaDate><CreaTime>15282800</CreaTime><ArcGISFormat>1.0</ArcGISFormat><SyncOnce>TRUE</SyncOnce><DataProperties><lineage><Process ToolSource="c:\program files\arcgis\pro\Resources\ArcToolbox\toolboxes\Spatial Analyst Tools.tbx\ExtractMultiValuesToPoints" Date="20241108" Time="152828">ExtractMultiValuesToPoints Suiattle_nodes "'1m LiDAR' F1m_LiDA_b" BILINEAR</Process></lineage></DataProperties></Esri></metadata>

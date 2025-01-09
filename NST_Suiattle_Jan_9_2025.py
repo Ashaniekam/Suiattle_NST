@@ -104,8 +104,8 @@ if not os.path.exists(output_folder):
 shp_file = os.path.join(os.getcwd (), ("Suiattle_river.shp"))
 points_shapefile = os.path.join(os.getcwd(), ("Suiattle_nodes.shp"))
 
-Suiattle_Dem = np.loadtxt("10m_hillshade_suia.asc", skiprows=6)
-parcels_path = r"C:\Users\longrea\OneDrive - Western Washington University\Thesis\1_Code\Suiattle Code v2\Results-Steady Statetruncated run_no_abrasion\Steady Statetruncated run_no_abrasion--parcels.pickle"
+# Suiattle_Dem = np.loadtxt("10m_hillshade_suia.asc", skiprows=6)
+# parcels_path = r"C:\Users\longrea\OneDrive - Western Washington University\Thesis\1_Code\Suiattle Code v2\Results-Steady Statetruncated run_no_abrasion\Steady Statetruncated run_no_abrasion--parcels.pickle"
 
 
 grid = read_shapefile(
@@ -398,9 +398,6 @@ scaled_count = np.linspace(0,100,len(scaled_gsd))
 ######
 
 
-# best fit: y_fit = slope_of_line * np.log(sorted_scaled_gsd) + intercept
-
-grain_sizes= 10**((Cum_finer- intercept)/slope_of_line)
 
 num_rows = np.shape(newpar_element_id)[0]
 

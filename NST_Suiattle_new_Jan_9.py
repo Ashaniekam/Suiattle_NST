@@ -66,7 +66,7 @@ from landlab.io.native_landlab import load_grid, save_grid
 OUT_OF_NETWORK = NetworkModelGrid.BAD_INDEX - 1
 
 # #### Selecting abrasion/density scenario #####
-scenario = 1
+scenario = 2
 
 if scenario == 1:
     scenario_num = "none"
@@ -80,7 +80,7 @@ else:
 
 # ##### Basic model parameters 
 
-timesteps = 70
+timesteps = 10
 pulse_time = 2
 dt = 60*60*24*1  # len of timesteps (1 day)
 
@@ -90,7 +90,7 @@ c = next(color)
 
 
 # bookkeeping 
-new_dir_name = "Pulse location test" + model_state ## Use when testing
+new_dir_name = "redggh" + model_state ## Use when testing
 #new_dir_name = "Longer_Run_Test_Scenario_1" + model_state
 
 new_dir = pathlib.Path(os.getcwd(), new_dir_name)
@@ -128,6 +128,10 @@ area_node = grid.at_node["drainage_area"]
 index_sorted_area_link = (area_link).argsort()
 index_sorted_area_node = (area_node).argsort()
 
+
+index_sort_back_to_landlab = np.zeros_like(index_sorted_area_link)
+index_sort_back_to_landlab[index_sorted_area_link] = np.arange(grid.number_of_links)
+
 #Sorted Drainage Area
 area_link_DS = area_link[index_sorted_area_link]
 area_node_DS = area_node[index_sorted_area_node]
@@ -150,16 +154,16 @@ width_DS = width[index_sorted_area_link]
 length = grid.at_link["reach_length"]
 length_DS = length[index_sorted_area_link]
 
+dist_downstream_DS = np.cumsum(length_DS)/1000
+
 #Sorted Slope
 slope = grid.at_link["channel_slope"]
 slope_DS = slope[index_sorted_area_link]
-initial_slope= slope.copy()
+initial_slope_DS= slope_DS.copy()
 
+grid.at_link["dist_downstream"]= dist_downstream_DS[index_sort_back_to_landlab]
 
-
-grid.at_link["dist_downstream"]= np.cumsum(length_DS)
-dist_downstream = grid.at_link["dist_downstream"]/1000
-dist_downstream_nodes = np.insert(dist_downstream, 0, 0.0)
+dist_downstream_nodes_DS = np.insert(dist_downstream_DS, 0, 0.0)
 
 #to calculate flow depth
 Mannings_n = 0.086 #median calculated from Suiattle gages (units m^3/s)
@@ -186,12 +190,15 @@ initialize_parcels = BedParcelInitializerDepth(
     flow_depth_at_link = depth,
     tau_c_50 = 0.15* slope**0.25, # slope dependent critical shields stress
     tau_c_multiplier = tau_c_multiplier,
-    median_number_of_starting_parcels = 100,
+    median_number_of_starting_parcels = 500,
     extra_parcel_attributes = ["source", "recycle_destination"]
     )
 
 parcels = initialize_parcels()
 
+parcels.dataset["source"].values = np.full(parcels.number_of_items, "initial_bed_sed")
+#will be used to track the parcels that are recycled
+parcels.dataset["recycle_destination"].values = np.full(parcels.number_of_items, "not_recycled_ever")
 
 # calculation of the initial volume of sediment on each link
 
@@ -210,7 +217,7 @@ D50_each_link = parcels.calc_aggregate_value(
 
 # Longitudinal Profile
 plt.figure()
-plt.plot(dist_downstream, slope_DS, '-' )
+plt.plot(dist_downstream_DS, slope_DS, '-' )
 plt.title("Starting channel Slope")
 plt.ylabel("Slope")
 plt.xlabel("Distance downstream (km)")
@@ -218,7 +225,7 @@ plt.show()
 
 #FLOW DEPTH
 plt.figure()
-plt.plot(dist_downstream, depth_DS, '-' )
+plt.plot(dist_downstream_DS, depth_DS, '-' )
 plt.title("Flow Depth")
 plt.ylabel("Flow depth (m)")
 plt.xlabel("Distance downstream (km)")
@@ -226,7 +233,7 @@ plt.show()
 
 # #Channel Width
 plt.figure()
-plt.plot(dist_downstream, width_DS, '-' )
+plt.plot(dist_downstream_DS, width_DS, '-' )
 plt.title("Channel Width")
 plt.ylabel("Channel Width (m)")
 plt.xlabel("Distance downstream (km)")
@@ -237,18 +244,18 @@ tau_star = tau/((rho_sed - rho_water) * gravity * D50_each_link)
 # Plot for shield stress
 plt.figure()
 plt.title("Tau_star")
-plt.plot(dist_downstream, tau_star)
+plt.plot(dist_downstream_DS, tau_star)
 plt.ylabel("Shield Stress")
 plt.xlabel("Distance downstream (km)")
 plt.show()
 
 # D50 for each link
 #find line of best fit
-a, b = np.polyfit(dist_downstream, D50_each_link, 1)
+a, b = np.polyfit(dist_downstream_DS, D50_each_link[index_sorted_area_link], 1)
 str_tau_c_multiplier = str(tau_c_multiplier)
 plt.figure()
-plt.scatter(dist_downstream, D50_each_link)
-plt.plot(dist_downstream, a*dist_downstream+b)  
+plt.scatter(dist_downstream_DS, D50_each_link[index_sorted_area_link])
+plt.plot(dist_downstream_DS, a*dist_downstream_DS+b)  
 plt.ylabel("D50 each link")
 plt.title("d50 each link (tau_c_multiplier = " + str_tau_c_multiplier +")")
 plt.xlabel("Distance downstream (km)")
@@ -294,6 +301,8 @@ sediment_active_percent = np.ones([grid.number_of_links,timesteps])*np.nan
 active_d_mean= np.ones([timesteps,grid.number_of_links])*np.nan
 D_mean_pulse_each_link= np.ones([grid.number_of_links,timesteps])*np.nan
 D_mean_each_link= np.ones([grid.number_of_links,timesteps])*np.nan
+Change_D_each_link= np.zeros([grid.number_of_links,timesteps])
+change_D = np.zeros([grid.number_of_links,timesteps])
 num_pulse_each_link= np.ones([grid.number_of_links,timesteps], dtype=int)*np.nan
 num_each_link= np.ones([grid.number_of_links,timesteps], dtype=int)*np.nan
 num_total_parcels_each_link= np.ones([grid.number_of_links,timesteps], dtype=int)*np.nan
@@ -306,18 +315,19 @@ num_active_pulse= np.ones([grid.number_of_links,timesteps])*np.nan
 
 time_array= np.arange(1, timesteps + 1)
 time_array_ss= np.arange(pulse_time, timesteps+1)#ss = steady state
-canyon_reaches= np.arange(45, 55)
+canyon_reaches= index_sorted_area_link[43:54]
 Sed_flux= np.empty([grid.number_of_links, timesteps])
+Slope_through_time_DS = np.empty([grid.number_of_links, timesteps])
 Sand_fraction_active = np.ones([grid.number_of_links,timesteps])*np.nan
 
-Elev_change = np.empty([grid.number_of_nodes,timesteps]) # 2d array of elevation change in each timestep 
+Elev_change_DS = np.empty([grid.number_of_nodes,timesteps]) # 2d array of elevation change in each timestep 
 
 
 # %% Pulse element variables
 fan_thickness = np.array([3.0, 6.25, 6.25, 5.75, 2.75, 1.25]) #meters
 fan_location= np.array([6, 7, 8, 9, 10, 11])
-pulse_parcel_vol = 10 #volume of each parcel m^3
-total_num_pulse_parcels = 490000
+pulse_parcel_vol = 25 #volume of each parcel m^3 - edited 1/9/25
+total_num_pulse_parcels = np.int64(4900000/pulse_parcel_vol * (1-bed_porosity))  
 
 
 initial_pulse_volume = fan_thickness*length[fan_location]*width[fan_location] # m^3; volume of pulse that should be added to each link of the Chocolate Fan
@@ -384,8 +394,7 @@ newpar_grid_elements.fill("link")
 field_grain_sizes = pd.read_excel((os.path.join(os.getcwd (), ("SuiattleFieldData_Combined20182019.xlsx"))), sheet_name = '3 - Grain size df deposit', header = 0)
 Suiattle_gsd = field_grain_sizes["Size (cm)"].values
 Suiattle_gsd_m = Suiattle_gsd/100
-
-scaled_size = total_num_pulse_parcels * 10
+scaled_size = np.int64(total_num_pulse_parcels * 10)
 
 # Scale up by repeating the array
 scaled_gsd = np.resize(Suiattle_gsd_m, scaled_size)
@@ -497,9 +506,7 @@ for t in range(0, (timesteps*dt), dt):
     if day_timestep % 20 == 0:
         discharge = discharge * 2.5
         print("Used the 0.1% exceedence flow for discharge")
-    elif day_timestep == 50:
-        discharge = discharge + 2.8316847 # 100 cfs (in m3/sec) the approx. change in discharge during an Outburst flood (USGS stream gage data for Sep 3, 2017)
-        print("Discharge prepresents outburst flood")
+    
     else:
         discharge = (0.2477 * area_link) + 8.8786
     
@@ -526,16 +533,16 @@ for t in range(0, (timesteps*dt), dt):
     total_area = sum(area_link)
 
     # Calculate the proportions based on drainage area
-    recycled_proportions = area_link/total_area
+    proportions = area_link/total_area
 
     # Calculate the number of parcels for each link based on proportions
-    num_recycle_bed = [int(recycled_proportion * num_exiting_parcels) for recycled_proportion in recycled_proportions]
+    num_recycle_bed = [int(proportion * num_exiting_parcels) for proportion in proportions]
 
     # Calculate the remaining parcels not accounted for by using int above
     remaining_bed_sed = num_exiting_parcels - sum(num_recycle_bed)
 
     # Calculate the number of additional parcels to add to each proportion
-    additional_bed_sed = np.round(np.array(recycled_proportions) * remaining_bed_sed).astype(int)
+    additional_bed_sed = np.round(np.array(proportions) * remaining_bed_sed).astype(int)
 
     # Distribute the remaining parcels to the proportions with the largest values
     while remaining_bed_sed > 0:
@@ -565,7 +572,6 @@ for t in range(0, (timesteps*dt), dt):
     d_recycled_parcels[np.int64(t/dt)]=np.mean(parcels.dataset.D.values[parcels.dataset.element_id.values[:,-1] == OUT_OF_NETWORK,-1])
     
     
-    
 # %% ########## Making a pulse #############  
     mask_ispulse = parcels.dataset.source == 'pulse'
 
@@ -575,18 +581,12 @@ for t in range(0, (timesteps*dt), dt):
     if total_num_pulse_parcels > num_pulse_parcels_in_network :
 
     # Check if it's the time for pulse evaluation
-        if current_timestep >= pulse_time and (current_timestep - pulse_time) % 5 == 0:
+        if current_timestep >= pulse_time and (current_timestep - pulse_time) % 5 == 0: # XXXXX
     
             if t == dt * pulse_time:  
                 print ("# First pulse time")
             
-                mask_pulse = np.full(len(newpar_element_id),False)
-                mask_pulse = mask_pulse[:total_num_initial_pulse_parcels]==True
-                
-                
-                
-                
-                
+        
                 new_parcels = {"grid_element": newpar_grid_elements[:total_num_initial_pulse_parcels],
                       "element_id": newpar_element_id[:total_num_initial_pulse_parcels]}
 
@@ -600,97 +600,84 @@ for t in range(0, (timesteps*dt), dt):
                     "location_in_link": (["item_id", "time"], new_location_in_link[:total_num_initial_pulse_parcels]),
                     "D": (["item_id", "time"], new_D[:total_num_initial_pulse_parcels]),
                     "volume": (["item_id", "time"], new_volume[:total_num_initial_pulse_parcels]),
-                
-        
                     }
-                
-                
-            
                 
                 
                 total_num_added_pulse_parcels = total_num_initial_pulse_parcels
-                
+                parcels.add_item(
+                        time=[nst._time],
+                        new_item = new_parcels,
+                        new_item_spec = new_variables
+                        )
 
             else:
                 print(" OTHER Pulses")
-                num_pulse_in_fan = 0 # this timestep
+
+                elevation_above_bedrock = grid.at_node['topographic__elevation'][:-1]-grid.at_node['bedrock__elevation'][:-1]   
+                height_to_add_fan_links = fan_thickness- elevation_above_bedrock[fan_location]
+                
+                height_to_add_fan_links[height_to_add_fan_links<0]=0
+                height_to_add_fan_links = np.nan_to_num(height_to_add_fan_links, nan=0)
+                vol_to_add_fan_links = height_to_add_fan_links*length[fan_location]*width[fan_location]
+                num_parcels_add_to_fan_now = np.int64(vol_to_add_fan_links/pulse_parcel_vol)
+                
+                num_new_pulse = np.sum(num_parcels_add_to_fan_now)
                 
                 # Loop through pulse parcels to check their location
-                for i in nst.current_link[mask_ispulse]:
-                    if i in fan_location:
-                        num_pulse_in_fan += 1
+                new_pulse_location = [index for index, freq in enumerate((num_parcels_add_to_fan_now).astype(int), start=6) for _ in range(freq)]
                 
-                num_new_pulse = int(total_num_initial_pulse_parcels-num_pulse_in_fan)
+                print("The number of pulse added to each link is ", num_parcels_add_to_fan_now)
+                #####Check that the values match num_parcels_add_to_fan_now
+                unique_values, counts = np.unique(new_pulse_location, return_counts=True)
+                # Print the frequency
+                for value, freq in zip(unique_values, counts):
+                    print(f"The link {value} occurs {freq} times")
                 
-                print('The number of new pulse parcels added =', num_new_pulse)
-                # Update mask_pulse to include the correct number of parcels
-                mask_pulse = np.full(len(newpar_element_id),False)
-                mask_pulse = mask_pulse[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]
+                new_starting_link = np.squeeze(new_pulse_location) 
                 
+                if num_new_pulse >= 2: 
+                    
+                    newpar_element_id = new_pulse_location
+                    newpar_element_id = np.expand_dims(newpar_element_id, axis=1)   
+                    
                 
-                
-                
-                new_parcels = {"grid_element": newpar_grid_elements[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse],
-                      "element_id": newpar_element_id[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]}
 
-                new_variables = {
-                    "starting_link": (["item_id"], new_starting_link[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]),
-                    "abrasion_rate": (["item_id"], new_abrasion_rate[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]),
-                    "density": (["item_id"], new_density[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]),
-                    "source": (["item_id"], new_source[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]),
-                    "time_arrival_in_link": (["item_id", "time"], new_time_arrival_in_link[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]),
-                    "active_layer": (["item_id", "time"], new_active_layer[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]),
-                    "location_in_link": (["item_id", "time"], new_location_in_link[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]),
-                    "D": (["item_id", "time"], new_D[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]),
-                    "volume": (["item_id", "time"], new_volume[total_num_added_pulse_parcels:total_num_added_pulse_parcels+num_new_pulse]),
-                
-        
-                    }
-                
-                
-                
-                
-                
-                total_num_added_pulse_parcels += num_new_pulse
-               
+                    print('The total number of new pulse parcels added =', num_new_pulse)
+            
+                    new_parcels = {"grid_element": newpar_grid_elements[total_num_initial_pulse_parcels:total_num_initial_pulse_parcels+num_new_pulse],
+                            "element_id": newpar_element_id}
 
-    
-        
-    
+                    new_variables = {
+                    "starting_link": (["item_id"], new_starting_link),
+                    "abrasion_rate": (["item_id"], new_abrasion_rate[total_num_initial_pulse_parcels:total_num_initial_pulse_parcels+num_new_pulse]),
+                    "density": (["item_id"], new_density[total_num_initial_pulse_parcels:total_num_initial_pulse_parcels+num_new_pulse]),
+                    "source": (["item_id"], new_source[total_num_initial_pulse_parcels:total_num_initial_pulse_parcels+num_new_pulse]),
+                    "time_arrival_in_link": (["item_id", "time"], new_time_arrival_in_link[total_num_initial_pulse_parcels:total_num_initial_pulse_parcels+num_new_pulse]),
+                    "active_layer": (["item_id", "time"], new_active_layer[total_num_initial_pulse_parcels:total_num_initial_pulse_parcels+num_new_pulse]),
+                    "location_in_link": (["item_id", "time"], new_location_in_link[total_num_initial_pulse_parcels:total_num_initial_pulse_parcels+num_new_pulse]),
+                    "D": (["item_id", "time"], new_D[total_num_initial_pulse_parcels:total_num_initial_pulse_parcels+num_new_pulse]),
+                    "volume": (["item_id", "time"], new_volume[total_num_initial_pulse_parcels:total_num_initial_pulse_parcels+num_new_pulse]),
+                      
+                        }
+
+                    total_num_added_pulse_parcels += num_new_pulse
+                    
+                parcels.add_item(
+                            time=[nst._time],
+                            new_item = new_parcels,
+                            new_item_spec = new_variables
+                            )
+                   
             new_source = np.array(new_source)
             percent_pulse_added[np.int64(t/dt)] = total_num_added_pulse_parcels/total_num_pulse_parcels
             print('making a pulse')
-            print("The number of pulse parcels added should be: ", np.shape(mask_pulse))
             print("On this timestep the total number of pulse parcels added = ", total_num_added_pulse_parcels)
             
             print('total_num_added_pulse_parcels =', total_num_added_pulse_parcels)
             print('t = ',t, ',timestep = ', t/dt) 
         
         # %% Add pulse         
-            # new_parcels = {"grid_element": newpar_grid_elements[mask_pulse],
-            #       "element_id": newpar_element_id[mask_pulse]}
-
-            # new_variables = {
-            #     "starting_link": (["item_id"], new_starting_link[mask_pulse]),
-            #     "abrasion_rate": (["item_id"], new_abrasion_rate[mask_pulse]),
-            #     "density": (["item_id"], new_density[mask_pulse]),
-            #     "source": (["item_id"], new_source[mask_pulse]),
-            #     "time_arrival_in_link": (["item_id", "time"], new_time_arrival_in_link[mask_pulse]),
-            #     "active_layer": (["item_id", "time"], new_active_layer[mask_pulse]),
-            #     "location_in_link": (["item_id", "time"], new_location_in_link[mask_pulse]),
-            #     "D": (["item_id", "time"], new_D[mask_pulse]),
-            #     "volume": (["item_id", "time"], new_volume[mask_pulse]),
-            
-    
-            #     }
- 
-            parcels.add_item(
-                    time=[nst._time],
-                    new_item = new_parcels,
-                    new_item_spec = new_variables
-                    )
         
-            #percent_pulse_remain = (vol_pulse_on/(np.sum(initial_pulse_rock_volume)))*100
     else:
         continue
 # %% Run one timestep    
@@ -710,9 +697,13 @@ for t in range(0, (timesteps*dt), dt):
         elev_initial = grid.at_node['topographic__elevation'].copy()
         
         
-    Elev_change[:,np.int64(t/dt)] = grid.at_node['topographic__elevation']-elev_initial
+    Elev_change_DS[:,np.int64(t/dt)] = (grid.at_node['topographic__elevation']-elev_initial)[index_sorted_area_node]
     
-
+    if t >= dt * pulse_time:
+        baseline_pulse_D = parcels.dataset.D.values[:, pulse_time][parcels.dataset['source'].values== 'pulse']
+        D = parcels.dataset.D.values[parcels.dataset['source'].values== 'pulse']
+        change_D = D[:, pulse_time + 1:] - baseline_pulse_D[:, np.newaxis]
+        
     if t%((timesteps*dt)/n_lines)==0:  
         
         # Animation
@@ -721,7 +712,7 @@ for t in range(0, (timesteps*dt), dt):
     
         elev_change = grid.at_node['topographic__elevation']-elev_initial
         
-        plt.plot(dist_downstream_nodes, elev_change, c= "darkblue")
+        plt.plot(dist_downstream_nodes_DS, elev_change[index_sorted_area_node], c= "darkblue")
         plt.xlabel('Distance downstream (km)')
         plt.title("Elevation change through time")
         plt.ylabel('Elevation change (m)')
@@ -732,7 +723,7 @@ for t in range(0, (timesteps*dt), dt):
     
         # shade it out for next frame, clear text
         text.remove()
-        plt.plot(dist_downstream_nodes, Elev_change, c = 'w', alpha = 0.2)
+        plt.plot(dist_downstream_nodes_DS, elev_change[index_sorted_area_node], c = 'w', alpha = 0.7)
         plt.pause(0.001)
     
     
@@ -778,6 +769,8 @@ for t in range(0, (timesteps*dt), dt):
     # Convert weighted-mean velocity to m/s
     Sed_flux [:,np.int64(t/dt)]= weighted_mean_velocity * nst._active_layer_thickness * grid.at_link['channel_width']
     
+    Slope_through_time_DS[:,np.int64(t/dt)] = grid.at_link["channel_slope"][index_sorted_area_link] - initial_slope_DS
+    
     Sand_fraction_active[:,np.int64(t/dt)] = grid.at_link["sediment__active__sand_fraction"]
     
     # Calculating volume of pulse that remains after abrasion    
@@ -788,6 +781,7 @@ for t in range(0, (timesteps*dt), dt):
      
     #percent_pulse_remain = (vol_pulse_on/(vol_pulse_on + vol_pulse_left))*100
      
+    
     
 #%%  #Aggregators for all parcels
     
@@ -826,6 +820,7 @@ for t in range(0, (timesteps*dt), dt):
         parcels.dataset.volume.values[:, -1],
         number_of_links,
     )
+    
     
     num_total_parcels_each_link[:, np.int64(t/dt)] = aggregate_items_as_count(
         element_all_parcels,
@@ -870,6 +865,13 @@ for t in range(0, (timesteps*dt), dt):
             parcels.dataset.volume.values[mask_ispulse, -1],
             number_of_links,
             )
+        Change_D_each_link[:,np.int64(timesteps- (pulse_time+1))]= aggregate_items_as_mean(
+            element_pulse,
+            change_D[:,-1],
+            parcels.dataset.volume.values[mask_ispulse, -1],
+            number_of_links,
+            )
+        
         
 
     # D_MEAN_ACTIVE through time
@@ -914,6 +916,7 @@ writer.finish()
 num_active_parcels_each_link_DS = num_active_parcels_each_link[index_sorted_area_link]
 volume_at_each_link_DS = volume_at_each_link[index_sorted_area_link]
 D_mean_each_link_DS = D_mean_each_link[index_sorted_area_link]
+Change_D_each_link_DS = Change_D_each_link[index_sorted_area_link]
 num_total_parcels_each_link_DS = num_total_parcels_each_link[index_sorted_area_link]
 num_each_link_DS =  num_each_link[index_sorted_area_link]
 num_active_pulse_DS = num_active_pulse[index_sorted_area_link] 
@@ -933,8 +936,8 @@ vol_nozero_DS[vol_nozero_DS == 0]= np.nan
 D_mean_pulse_each_link_nozero_DS= D_mean_pulse_each_link_DS.copy()
 D_mean_pulse_each_link_nozero_DS[D_mean_pulse_each_link_nozero_DS == 0]= np.nan
 
-D_mean_each_link_nozero_DS= D_mean_each_link_DS.copy()
-D_mean_each_link_nozero_DS[D_mean_each_link_nozero_DS == 0]= np.nan
+D_mean_change_each_link_nozero_DS= Change_D_each_link_DS.copy()
+D_mean_change_each_link_nozero_DS[D_mean_change_each_link_nozero_DS == 0]= np.nan
 
 pulse_ids = parcels.dataset.element_id.values[mask_ispulse]
 
@@ -1048,7 +1051,7 @@ plt.text(2,50, 'n = '+str(len(nonzero_travel_dist))+' parcels')
 plt.text(2,50, 'n = '+str(len(nonzero_travel_dist))+' parcels')
 
 plt.figure(dpi=600)
-plt.pcolor(time_array, dist_downstream, Sand_fraction_active, 
+plt.pcolor(time_array, dist_downstream_DS, Sand_fraction_active, 
             shading='nearest', 
             norm= None, 
             cmap="copper"
@@ -1068,6 +1071,24 @@ plot_name = str(new_dir) + "/" + 'percentage of the pulse added (Scenario' + str
 plt.savefig(plot_name)
 plt.show()
 
+plt.figure(dpi=600)
+plt.pcolor(time_array, dist_downstream_DS, Change_D_each_link, cmap = 'winter_r')
+plt.colorbar(label= "Mean grain size change of pulse parcels (m)")
+plt.xlabel('Days')
+plt.ylabel("Distance downstream (km)")
+plot_name = str(new_dir) + "/" + 'Dmean_change (Scenario' + str(scenario_num) + ').png'
+plt.savefig(plot_name)
+plt.show()
+
+plt.figure(dpi=600)
+plt.pcolor(time_array, dist_downstream_DS, Slope_through_time_DS, cmap = 'winter_r')
+plt.colorbar(label= "Change in Slope")
+plt.xlabel('Days')
+plt.ylabel("Distance downstream (km)")
+plot_name = str(new_dir) + "/" + 'slope_change (Scenario' + str(scenario_num) + ').png'
+plt.savefig(plot_name)
+plt.show()
+
 
 
 variables = {
@@ -1078,11 +1099,11 @@ variables = {
     'vol_pulse_nozero_DS': vol_pulse_nozero_DS,
     'vol_nozero_DS': vol_nozero_DS,
     'D_mean_pulse_each_link_nozero_DS': D_mean_pulse_each_link_nozero_DS,
-    'D_mean_each_link_nozero_DS': D_mean_each_link_nozero_DS,
     'percent_active_pulse_DS': percent_active_pulse_DS,
     'percent_active_DS': percent_active_DS,
-    'Elev_change': Elev_change,
+    'Elev_change_DS': Elev_change_DS,
     'transport_capacity': Sed_flux,
+    'transport_capacity_limited': Sed_flux,
 }
 
 # Define colorbar labels with new names
@@ -1094,11 +1115,11 @@ colorbar_labels = {
     'vol_pulse_nozero_DS': 'Volume of pulse parcels ($m^3$)',
     'vol_nozero_DS': 'Volume of all parcels ($m^3$)',
     'D_mean_pulse_each_link_nozero_DS': 'Mean grain size of pulse parcels (m)',
-    'D_mean_each_link_nozero_DS': 'Mean grain size of all parcels (m)',
     'percent_active_pulse_DS': 'Percentage of active pulse parcels (%)',
     'percent_active_DS': 'Percentage of active parcels (%)',
-    'Elev_change': 'Elevation change from initial (m)',
-    'transport_capacity': 'Transport rate (m/s)',
+    'Elev_change_DS': 'Elevation change from initial (m)',
+    'transport_capacity': 'Transport rate ($m^3$/s)',
+    'transport_capacity_limited': 'Transport rate (m/s)',
 }
 # Define plot titles with new names
 plot_titles = {
@@ -1109,11 +1130,11 @@ plot_titles = {
     'vol_pulse_nozero_DS': f"Volume of pulse parcel through time (Scenario = {scenario})",
     'vol_nozero_DS': f"Volume of parcel through time (Scenario = {scenario})",
     'D_mean_pulse_each_link_nozero_DS': f"Dmean grain size through time (Scenario = {scenario})",
-    'D_mean_each_link_nozero_DS': f"Dmean grain size through time (Scenario = {scenario})",
     'percent_active_pulse_DS': f"Percentage active pulse parcels (Scenario = {scenario})",
     'percent_active_DS': f"Percentage active parcels (Scenario = {scenario})",
-    'Elev_change': f"Elevation change through time (Scenario = {scenario})",
+    'Elev_change_DS': f"Elevation change through time (Scenario = {scenario})",
     'transport_capacity': f"Transport capacity (Scenario = {scenario})",
+    'transport_capacity_limited': f"Transport capacity (Scenario = {scenario})",
 }
 
 # Define plot names with new names
@@ -1125,11 +1146,11 @@ plot_names = {
     'vol_pulse_nozero_DS': f"{new_dir}/Vol_pulse(Scenario{scenario_num}).png",
     'vol_nozero_DS': f"{new_dir}/Vol(Scenario{scenario_num}).png",
     'D_mean_pulse_each_link_nozero_DS': f"{new_dir}/D_mean_pulse(Scenario{scenario_num}).png",
-    'D_mean_each_link_nozero_DS': f"{new_dir}/Dmean_(Scenario{scenario_num}).png",
     'percent_active_pulse_DS': f"{new_dir}/fraction_active_pulse(Scenario{scenario_num}).png",
     'percent_active_DS': f"{new_dir}/Fraction_Active (Scenario{scenario_num}).png",
-    'Elev_change': f"{new_dir}/TrackElevChange(Scenario{scenario_num}).png",
+    'Elev_change_DS': f"{new_dir}/TrackElevChange(Scenario{scenario_num}).png",
     'transport_capacity': f"{new_dir}/transport_capacity(Scenario{scenario_num}).png",
+    'transport_capacity_limited': f"{new_dir}/transport_capacity(Scenario{scenario_num}).png",
 }
 
 # Define colormaps with new names
@@ -1141,11 +1162,12 @@ cmap = {
     'vol_pulse_nozero_DS': 'plasma_r',
     'vol_nozero_DS': 'plasma_r',
     'D_mean_pulse_each_link_nozero_DS': 'winter_r',
-    'D_mean_each_link_nozero_DS': 'winter_r',
+    #'D_mean_change_each_link_nozero_DS': 'winter_r',
     'percent_active_pulse_DS': 'Wistia',
     'percent_active_DS': 'Wistia',
-    'Elev_change': 'coolwarm',
+    'Elev_change_DS': 'coolwarm',
     'transport_capacity': 'viridis',
+    'transport_capacity_limited': 'viridis',
 }
 
 norm = {
@@ -1156,33 +1178,34 @@ norm = {
     'vol_pulse_nozero_DS': matplotlib.colors.LogNorm(vmin=0.1, vmax=5000),
     'vol_nozero_DS': matplotlib.colors.LogNorm(vmin=0.1, vmax=5000),
     'D_mean_pulse_each_link_nozero_DS': matplotlib.colors.LogNorm(vmin=0.01, vmax=1.0),
-    'D_mean_each_link_nozero_DS': matplotlib.colors.LogNorm(vmin=0.01, vmax=0.1),
+    #'D_mean_change_each_link_nozero_DS': matplotlib.colors.LogNorm(vmin=0.01, vmax=0.1),
     'percent_active_pulse_DS': matplotlib.colors.LogNorm(vmin=0.1, vmax=1.0),
     'percent_active_DS': matplotlib.colors.LogNorm(vmin=0.1, vmax=1.0),
-    'Elev_change': colors.CenteredNorm(),
+    'Elev_change_DS': colors.CenteredNorm(),
     'transport_capacity': None,
+    'transport_capacity_limited': matplotlib.colors.Normalize(vmin=0.00, vmax=0.125),
 }
     
 # Plot for all time
 for var_name, data in variables.items():
     plt.figure()
     
-    if var_name == 'Elev_change':  # Special handling for Elev_change
-        mesh = plt.pcolor(time_array, dist_downstream_nodes, data, shading='auto', cmap=cmap[var_name], norm=norm[var_name])
-        
+    if var_name == 'Elev_change_DS':  # Special handling for Elev_change
+        mesh = plt.pcolor(time_array, dist_downstream_nodes_DS, data, shading='auto', cmap=cmap[var_name], norm=norm[var_name])
+
     else:
-        mesh = plt.pcolor(time_array, dist_downstream, data, shading='auto', cmap=cmap[var_name], norm=norm[var_name] if norm[var_name] is not None else None)
+        mesh = plt.pcolor(time_array, dist_downstream_DS, data, shading='auto', cmap=cmap[var_name], norm=norm[var_name] if norm[var_name] is not None else None)
         
     
     x_right_edge = plt.gca().get_xlim()[1]
-    canyonline = plt.plot(np.ones(len(canyon_reaches))*x_right_edge,dist_downstream[canyon_reaches],color='grey')
-    canyonline[0].set_clip_on(False)
+    canyonline = plt.plot(np.ones(len(canyon_reaches))*x_right_edge,dist_downstream_DS[canyon_reaches],color='grey')
+    # canyonline[0].set_clip_on(False)
     plt.text(x_right_edge, 40, 'Canyon Reaches', rotation=90, va='center', ha='left', color='grey')
-    pulseline = plt.plot(np.ones(len(fan_location))*x_right_edge,dist_downstream[fan_location],color='red')
+    pulseline = plt.plot(np.ones(len(fan_location))*x_right_edge,dist_downstream_DS[fan_location],color='red')
     pulseline[0].set_clip_on(False)
     
     plt.text(x_right_edge, 10, "Pulse", rotation= 90, va= 'center', ha= 'left', color='red')
-    plt.axis([1,timesteps,0,max(dist_downstream_nodes)])
+    plt.axis([1,timesteps,0,max(dist_downstream_nodes_DS)])
     plt.axvline(x=pulse_time, color='gray', linestyle='--', linewidth=1.5, label=f'Day {pulse_time}')
 
     
@@ -1238,8 +1261,8 @@ plt.show()
 #D50 for each link
 fig, ax1 = plt.subplots()
 ax2 = ax1.twinx()
-ax1.plot(dist_downstream, D50_each_link,'-', color='k')
-ax2.plot(dist_downstream, num_total_parcels_each_link_DS,'-', color='brown') #,'.' makes it a dot chart, '-' makes line chart
+ax1.plot(dist_downstream_DS, D50_each_link[index_sorted_area_link],'-', color='k')
+ax2.plot(dist_downstream_DS, num_total_parcels_each_link_DS,'-', color='brown') #,'.' makes it a dot chart, '-' makes line chart
 ax1.set_xlabel("Distance downstream (km)")
 ax1.set_ylabel("D50", color='k')
 plt.title("Number of parcels and the grain size (Scenario = %i)" %scenario)
@@ -1252,6 +1275,15 @@ plt.figure()
 plt.plot(area_link_DS, discharge_DS, '.' )
 plt.ylabel("Discharge ($m^3$/sec)")
 plt.xlabel("Drainage Area ($km^2$)")
+plt.show()
+
+plt.figure()
+plt.plot(dist_downstream_DS, grid.at_link["channel_slope"][index_sorted_area_link], '-', color= 'red',  label = "Current slope" )
+plt.plot(dist_downstream_DS, initial_slope_DS, '-', color ='black', label ="Initial slope" )
+plt.title("Starting channel Slope")
+plt.ylabel("Slope")
+plt.xlabel("Distance downstream (km)")
+plt.legend()
 plt.show()
 
 # # #NST plots

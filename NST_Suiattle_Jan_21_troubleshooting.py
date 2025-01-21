@@ -159,7 +159,7 @@ dist_downstream_DS = np.cumsum(length_DS)/1000
 #Sorted Slope
 slope = grid.at_link["channel_slope"]
 slope_DS = slope[index_sorted_area_link]
-initial_slope= slope_DS.copy()
+initial_slope_DS= slope_DS.copy()
 
 grid.at_link["dist_downstream"]= dist_downstream_DS[index_sort_back_to_landlab]
 
@@ -317,7 +317,7 @@ time_array= np.arange(1, timesteps + 1)
 time_array_ss= np.arange(pulse_time, timesteps+1)#ss = steady state
 canyon_reaches= index_sorted_area_link[43:54]
 Sed_flux= np.empty([grid.number_of_links, timesteps])
-slope_through_time = np.empty([grid.number_of_links, timesteps])
+slope_through_time_DS = np.empty([grid.number_of_links, timesteps])
 Sand_fraction_active = np.ones([grid.number_of_links,timesteps])*np.nan
 
 Elev_change_DS = np.empty([grid.number_of_nodes,timesteps]) # 2d array of elevation change in each timestep 
@@ -769,7 +769,7 @@ for t in range(0, (timesteps*dt), dt):
     # Convert weighted-mean velocity to m/s
     Sed_flux [:,np.int64(t/dt)]= weighted_mean_velocity * nst._active_layer_thickness * grid.at_link['channel_width']
     
-    slope_through_time[:,np.int64(t/dt)] = grid.at_link["channel_slope"][index_sorted_area_link]
+    slope_through_time_DS[:,np.int64(t/dt)] = grid.at_link["channel_slope"][index_sorted_area_link] - initial_slope_DS
     
     Sand_fraction_active[:,np.int64(t/dt)] = grid.at_link["sediment__active__sand_fraction"]
     
@@ -1081,7 +1081,7 @@ plt.savefig(plot_name)
 plt.show()
 
 plt.figure(dpi=600)
-plt.pcolor(time_array, dist_downstream_DS, slope_through_time, cmap = 'winter_r')
+plt.pcolor(time_array, dist_downstream_DS, slope_through_time_DS, cmap = 'winter_r')
 plt.colorbar(label= "Change in Slope")
 plt.xlabel('Days')
 plt.ylabel("Distance downstream (km)")
@@ -1279,7 +1279,7 @@ plt.show()
 
 plt.figure()
 plt.plot(dist_downstream_DS, grid.at_link["channel_slope"][index_sorted_area_link], '-', color= 'red',  label = "Current slope" )
-plt.plot(dist_downstream_DS, initial_slope, '-', color ='black', label ="Initial slope" )
+plt.plot(dist_downstream_DS, initial_slope_DS, '-', color ='black', label ="Initial slope" )
 plt.title("Starting channel Slope")
 plt.ylabel("Slope")
 plt.xlabel("Distance downstream (km)")

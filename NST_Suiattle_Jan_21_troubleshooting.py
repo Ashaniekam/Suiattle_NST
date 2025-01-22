@@ -94,7 +94,7 @@ c = next(color)
 
 
 # bookkeeping 
-new_dir_name = "redggh" + model_state ## Use when testing
+new_dir_name = "Test GitHub" + model_state ## Use when testing
 #new_dir_name = "Longer_Run_Test_Scenario_1" + model_state
 
 new_dir = pathlib.Path(os.getcwd(), new_dir_name)

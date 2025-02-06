@@ -39,7 +39,6 @@ import pathlib
 import pickle
 import xarray as xr
 import time as model_time
-from landlab.plot.imshow import imshow_grid
 import scipy.constants
 
 
@@ -67,7 +66,7 @@ from landlab.io.native_landlab import load_grid, save_grid
 OUT_OF_NETWORK = NetworkModelGrid.BAD_INDEX - 1
 
 # #### Selecting abrasion/density scenario #####
-scenario = 1
+scenario = 3
 
 if scenario == 1:
     scenario_num = "none"
@@ -81,8 +80,8 @@ else:
 
 # ##### Basic model parameters 
 
-timesteps = 50
-pulse_time = 2
+timesteps = 2000
+pulse_time = 200
 num_hours_each_time = 8
 dt = 60*60*num_hours_each_time*1  # len of timesteps (1 day)
 
@@ -92,7 +91,7 @@ c = next(color)
 
 
 # bookkeeping 
-new_dir_name = "Final Model Run_Scenario 1" + model_state ## Use when testing
+new_dir_name = "Model Run_Scenario 3" + model_state ## Use when testing
 #new_dir_name = "Longer_Run_Test_Scenario_1" + model_state
 
 new_dir = pathlib.Path(os.getcwd(), new_dir_name)
@@ -724,7 +723,7 @@ for t in range(0, (timesteps*dt), dt):
         plt.xlabel('Distance downstream (km)')
         plt.title("Elevation change through time")
         plt.ylabel('Elevation change (m)')
-        plt.ylim(-7, 10)
+        plt.ylim(-7, 18)
         text = plt.text(35,7,str(np.round(t/(60*60*24),1))+" Days")
       
         writer.grab_frame()
@@ -913,10 +912,10 @@ writer.finish()
 # with open(file_path, 'rb') as file:
 #     parcels = pickle.load(file)
 
-initial_D = D_mean_each_link[:, pulse_time-1].reshape(-1, 1)  # Reshape to (number_of_links, 1) for broadcasting
+pre_pulse_D = D_mean_each_link[:, pulse_time-1].reshape(-1, 1)  # Reshape to (number_of_links, 1) for broadcasting
 
 # Subtract the initial value from every timestep
-Change_D_each_link = D_mean_each_link - initial_D
+Change_D_each_link = D_mean_each_link - pre_pulse_D
 
 
 #%% Sorted Variables
@@ -1144,7 +1143,7 @@ element_ids = parcels.dataset.element_id.values
 recycle = parcels.dataset["recycle_destination"].values
 ###############
 
-np.savez("Plotting_arrays.npz", sediment_active_percent=sediment_active_percent, num_pulse_each_link_DS=num_pulse_each_link_DS, 
+np.savez("P_3.npz", sediment_active_percent=sediment_active_percent, num_pulse_each_link_DS=num_pulse_each_link_DS, 
          num_total_parcels_each_link_DS=num_total_parcels_each_link_DS, num_active_pulse_nozero_DS=num_active_pulse_nozero_DS, 
          vol_pulse_nozero_DS=vol_pulse_nozero_DS, vol_nozero_DS=vol_nozero_DS, D_mean_pulse_each_link_nozero_DS=D_mean_pulse_each_link_nozero_DS,
          percent_active_pulse_DS=percent_active_pulse_DS, percent_active_DS=percent_active_DS, Elev_change_DS=Elev_change_DS, Sed_flux=Sed_flux,
@@ -1247,9 +1246,9 @@ norm = {
     'num_pulse_each_link_DS': None,
     'num_total_parcels_each_link_DS': None,
     'num_active_pulse_nozero_DS': None,
-    'vol_pulse_nozero_DS': matplotlib.colors.LogNorm(vmin=0.1, vmax=5000),
-    'vol_nozero_DS': matplotlib.colors.LogNorm(vmin=0.1, vmax=5000),
-    'D_mean_pulse_each_link_nozero_DS': matplotlib.colors.LogNorm(vmin=0.01, vmax=1.0),
+    'vol_pulse_nozero_DS': matplotlib.colors.LogNorm(vmin=0.001, vmax=5000),
+    'vol_nozero_DS': matplotlib.colors.LogNorm(vmin=0.001, vmax=5000),
+    'D_mean_pulse_each_link_nozero_DS': matplotlib.colors.LogNorm(vmin=0.005, vmax=1.0),
     #'D_mean_change_each_link_nozero_DS': matplotlib.colors.LogNorm(vmin=0.01, vmax=0.1),
     'percent_active_pulse_DS': matplotlib.colors.Normalize(vmin=0.0, vmax=1.0),
     'percent_active_DS': matplotlib.colors.Normalize(vmin=0.0, vmax=1.0),
@@ -1376,27 +1375,26 @@ plt.show()
 
 # # #NST plots
 
-grid.add_field("elevation_change", elev_change_at_link, at="link", units="m", copy=True, clobber=True)
-log_width = np.log(width)
-Suiattle_Dem = np.loadtxt("10m_hillshade_suia.asc", skiprows=6)
+# # grid.add_field("elevation_change", elev_change_at_link, at="link", units="m", copy=True, clobber=True)
+# # log_width = np.log(width)
 
-fig, ax = plt.subplots(figsize=(10, 8))
-Suiattle_Dem = np.array(Suiattle_Dem)  # Ensure `Suiattle_Dem` is a NumPy array
-im_dem = ax.imshow(Suiattle_Dem, cmap='gist_gray', vmin=0, vmax=np.max(Suiattle_Dem))
-ax= plot_network_and_parcels(grid,parcels,parcel_time_index=0,link_attribute=('elevation_change'),parcel_alpha=0,network_linewidth=log_width, link_attribute_title= "Elevation Change in each reach (m)", network_cmap= "coolwarm")
-plt.colorbar(im_dem, ax=ax, label="Elevation (m)")
-plt.title("Suiattle DEM")
-plt.xlabel("Longitude")
-plt.ylabel("Latitude")
+# # fig, ax = plt.subplots(figsize=(10, 8))
+# # Suiattle_Dem = np.array(Suiattle_Dem)  # Ensure `Suiattle_Dem` is a NumPy array
+# # im_dem = ax.imshow(Suiattle_Dem, cmap='gist_gray', vmin=0, vmax=np.max(Suiattle_Dem))
+# # ax= plot_network_and_parcels(grid,parcels,parcel_time_index=0,link_attribute=('elevation_change'),parcel_alpha=0,network_linewidth=log_width, link_attribute_title= "Elevation Change in each reach (m)", network_cmap= "coolwarm")
+# # plt.colorbar(im_dem, ax=ax, label="Elevation (m)")
+# # plt.title("Suiattle DEM")
+# # plt.xlabel("Longitude")
+# # plt.ylabel("Latitude")
 
 
-fig, ax = plt.subplots(figsize=(10, 8))
-Suiattle_Dem = np.array(Suiattle_Dem)  # Ensure `Suiattle_Dem` is a NumPy array
-im_dem = ax.imshow(Suiattle_Dem, cmap='gist_gray', vmin=0, vmax=np.max(Suiattle_Dem))
-plt.colorbar(im_dem, ax=ax, label="Elevation (m)")
-plt.title("Suiattle DEM")
-plt.xlabel("Longitude")
-plt.ylabel("Latitude")
+# # fig, ax = plt.subplots(figsize=(10, 8))
+# # Suiattle_Dem = np.array(Suiattle_Dem)  # Ensure `Suiattle_Dem` is a NumPy array
+# # im_dem = ax.imshow(Suiattle_Dem, cmap='gist_gray', vmin=0, vmax=np.max(Suiattle_Dem))
+# # plt.colorbar(im_dem, ax=ax, label="Elevation (m)")
+# # plt.title("Suiattle DEM")
+# # plt.xlabel("Longitude")
+# # plt.ylabel("Latitude")
 
 # # fig.savefig(plot_name, bbox_inches='tight', dpi=700)
 
@@ -1458,7 +1456,8 @@ for link in range(grid.number_of_links):
                     D_orderedfilo[source_orderedfilo=='pulse']*50+5,
                     'r',
                     alpha=0.7)
-        text = plt.text(0.8,0.9,str(np.int64(tstep*(dt/(60*60*24))))+" Days") #sloppy workaround, but I'm on the plane
+        text = plt.text(0.8,0.9,str(np.int64(tstep*(dt/(60*60*24))))+" Days") 
+        
         plt.xlim(0,1)
         plt.ylim(0,4)
         plt.xlabel('Fractional distance down reach')
@@ -1469,7 +1468,7 @@ for link in range(grid.number_of_links):
     plt.close()
     writer.finish()
     
-np.savez("Allison_gif_arrays.npz", mask_here=mask_here, time_arrival=time_arrival, volumes=volumes,current_link=current_link, this_links_parcels=this_links_parcels,
+np.savez("All_3.npz", mask_here=mask_here, time_arrival=time_arrival, volumes=volumes,current_link=current_link, this_links_parcels=this_links_parcels,
          time_arrival_sort=time_arrival_sort,
          parcel_id_time_sorted=parcel_id_time_sorted, vol_ordered_filo=vol_ordered_filo, cumvol_orderedfilo=cumvol_orderedfilo,
          effectiveheight_orderedfilo=effectiveheight_orderedfilo, source_orderedfilo=source_orderedfilo, active_orderedfilo=active_orderedfilo,

@@ -6,7 +6,6 @@ This is the code for my thesis on the Suiattle River
 
 Tasks/Issues 2-7-25:
     - Why is transport_capacity not DS?
-    - Why is nst._d50_active not updating? 
    
 @author: longrea, pfeiffea
 
@@ -43,7 +42,7 @@ OUT_OF_NETWORK = NetworkModelGrid.BAD_INDEX - 1
 # %% Basic model setup and knobs 
 
 # #### Selecting abrasion/density scenario #####
-scenario = 1
+scenario = 2
 
 if scenario == 1:
     scenario_num = "none"
@@ -800,8 +799,11 @@ for t in range(0, (timesteps*dt), dt):
             parcels.dataset.volume.values[mask_ispulse, -1],
             number_of_links,
             )
-        
+            
+plt.figure(figAnim)
+plt.close()
 
+writer.finish()
     
 # %% -----> END MODEL RUN <----   
     
@@ -1082,7 +1084,9 @@ for var_name, data in variables.items():
 #     plt.ylabel("Distance downstream  (km)")
 #     plt.show()  
 
-# %% TEMP block - cumulative abrasion plot
+
+# %% Misc other plots
+# ######### Plots ###########
 
 # #### Total pulse volume through time (constant for no-abrasion, until parcels exit)
 plt.figure(dpi=600,figsize=(6,2))
@@ -1110,10 +1114,6 @@ plt.ylabel(r'total pulse vol (m$^3$)')
 plot_name = str(new_dir) + "/" + 'PulseAbrasionRemaining(Scenario' + str(scenario_num) + ').png'
 plt.savefig(plot_name, dpi=700)
 
-
-
-# %% Misc other plots
-# ######### Plots ###########
 
 #Elevation change
 plt.figure()

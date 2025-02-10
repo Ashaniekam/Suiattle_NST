@@ -43,7 +43,7 @@ OUT_OF_NETWORK = NetworkModelGrid.BAD_INDEX - 1
 # %% Basic model setup and knobs 
 
 # #### Selecting abrasion/density scenario #####
-scenario = 3
+scenario = 1
 
 if scenario == 1:
     scenario_num = "none"
@@ -56,9 +56,8 @@ else:
     model_state = "4_times SHRS proxy"
 
 # ##### Basic model parameters 
-
-timesteps = 200
-pulse_time = 2
+timesteps = 2000
+pulse_time = 200
 num_hours_each_time = 8
 dt = 60*60*num_hours_each_time*1  # len of timesteps 
 
@@ -67,7 +66,7 @@ color = iter(plt.cm.viridis(np.linspace(0, 1, n_lines+1)))
 c = next(color)
 
 # bookkeeping 
-new_dir_name = "APtesting" + model_state ## Use when testing
+new_dir_name = "AP2000x8hr" + model_state ## Use when testing
 #new_dir_name = "Longer_Run_Test_Scenario_1" + model_state
 
 new_dir = pathlib.Path(os.getcwd(), new_dir_name)
@@ -1085,17 +1084,26 @@ for var_name, data in variables.items():
 
 # %% TEMP block - cumulative abrasion plot
 
-
 # #### Total pulse volume through time (constant for no-abrasion, until parcels exit)
 plt.figure(dpi=600,figsize=(6,2))
 
 plt.stackplot(days,vol_pulse_on,vol_pulse_exited,vol_pulse_abraded, colors = ['k','darkorange','darkgrey'])
 
 
-#plt.ylim(0,np.nanmax(pulse_volume_through_time))
-#plt.xlim(0,np.max(time_array_days))
-#plt.text(150,np.nanmax(pulse_volume_through_time)*0.75,'(lost to abrasion)')
-#plt.text(150,np.nanmax(pulse_volume_through_time)*0.1,'(coarse pulse remaining)', color = 'white')
+plt.ylim(0,np.nanmax(vol_pulse_on + vol_pulse_exited + vol_pulse_abraded))
+plt.xlim(0,np.max(days)) 
+median_y= np.nanmedian(vol_pulse_on + vol_pulse_exited + vol_pulse_abraded)
+
+plt.text(np.max(days)*0.6,np.median(vol_pulse_on)*0.5,'(pulse sed in channel)', color = 'white')
+
+if np.max(vol_pulse_exited)>0.05*median_y:
+    vloc = np.median(vol_pulse_on) + 0.9 * (np.median(vol_pulse_exited))
+    plt.text(np.max(days)*0.6,vloc,'(exited channel)', color = 'white')
+    
+if np.max(vol_pulse_abraded)>0.05*median_y:
+    vloc = median_y +0.9*(np.nanmedian(vol_pulse_abraded))
+    plt.text(np.max(days)*0.6,vloc,'(lost to abrasion)', color = 'black')
+    
 plt.xlabel('Days')
 plt.ylabel(r'total pulse vol (m$^3$)')
 
@@ -1256,16 +1264,16 @@ plt.show()
 
 # %% GIF within a link parcels
 
-for link in np.array([9,12,14,100]):#range(16):#range(grid.number_of_links):
+for link in np.array([4,9,12,13,14,40,60,100]):#range(16):#range(grid.number_of_links):
     output_folder = os.path.join(os.getcwd (), ("Gifs replace this folder"))
     if not os.path.exists(output_folder):
         os.mkdir(output_folder)
     # Initiate an animation writer using the matplotlib module, `animation`.
     figPulseAnim, axPulseAnim = plt.subplots(1, 1, dpi=600)
-    writer = animation.FFMpegWriter(fps=50)
+    writer = animation.FFMpegWriter(fps=20)
     gif_name = output_folder +"/"+ scenario_num + "--Parcel_evol_at_link" + str(link) +".gif"
     writer.setup(figPulseAnim,gif_name)
-    for tstep in range(200):#range(timesteps):
+    for tstep in np.arange(0,timesteps,5):#range(timesteps):
     # for tstep in [500]: # for now, doing for just one timestep
         mask_here = parcels.dataset.element_id.values[:,tstep] == link
         time_arrival = parcels.dataset.time_arrival_in_link.values[mask_here, tstep]
@@ -1284,18 +1292,18 @@ for link in np.array([9,12,14,100]):#range(16):#range(grid.number_of_links):
         # Plot
         plt.scatter(location_in_link_orderedfilo[active_orderedfilo==1],
                     effectiveheight_orderedfilo[active_orderedfilo==1],
-                    D_orderedfilo[active_orderedfilo==1]*50+3,
+                    D_orderedfilo[active_orderedfilo==1]*50+2,
                     'k')
         plt.scatter(location_in_link_orderedfilo[active_orderedfilo==0],
                     effectiveheight_orderedfilo[active_orderedfilo==0],
-                    D_orderedfilo[active_orderedfilo==0]*50+3,
+                    D_orderedfilo[active_orderedfilo==0]*50+2,
                     'grey')
         # Shade all pulse red/pink
         plt.scatter(location_in_link_orderedfilo[source_orderedfilo=='pulse'],
                     effectiveheight_orderedfilo[source_orderedfilo=='pulse'],
-                    D_orderedfilo[source_orderedfilo=='pulse']*50+3,
+                    D_orderedfilo[source_orderedfilo=='pulse']*50+2,
                     'r',
-                    alpha=0.7)
+                    alpha=0.3)
         
         text = plt.text(0.8,0.9,str(np.int64(tstep*(dt/(60*60*24))))+" Days") 
         

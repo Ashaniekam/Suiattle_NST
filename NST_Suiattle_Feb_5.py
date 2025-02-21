@@ -42,7 +42,7 @@ OUT_OF_NETWORK = NetworkModelGrid.BAD_INDEX - 1
 # %% Basic model setup and knobs 
 
 # #### Selecting abrasion/density scenario #####
-scenario = 2
+scenario = 3
 
 if scenario == 1:
     scenario_num = "none"
@@ -1130,9 +1130,9 @@ ax2 = ax1.twinx()
 ax1.plot(days, d_recycled_parcels,'-', color='brown')
 ax2.plot(days, n_recycled_parcels,'-', color='k') #,'.' makes it a dot chart, '-' makes line chart
 ax1.set_xlabel("Days")
-ax1.set_ylabel("Mean D recycled parcels (m)", color='k')
+ax1.set_ylabel("Mean D recycled parcels (m)", color='brown')
 plt.title("Recycled parcels (Scenario = %i)" %scenario)
-ax2.set_ylabel("Number of recycled parcels", color='brown')
+ax2.set_ylabel("Total number of recycled parcels", color='k')
 plot_name = str(new_dir) + "/" + 'Recycled(Scenario' + str(scenario_num) + ').png'
 plt.savefig(plot_name, dpi=700)
 plt.show()

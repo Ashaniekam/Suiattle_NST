@@ -811,7 +811,9 @@ writer.finish()
 
 # %% Variable bookkeeping - downstream sorting, etc
 
-pre_pulse_D50s = D50s_each_link[:, pulse_time-1].reshape(-1, 1)  # Reshape to (number_of_links, 1) for broadcasting
+pre_pulse_D50s = np.mean(D50s_each_link[:, pulse_time-20:pulse_time-1],axis = 1) # average of 10 timesteps before
+pre_pulse_D50s = pre_pulse_D50s.reshape(-1, 1)
+
 Change_D50s_each_link = D50s_each_link - pre_pulse_D50s
 
 pre_pulse_Dmean = D_mean_active_each_link[:, pulse_time-1].reshape(-1, 1)  # Reshape to (number_of_links, 1) for broadcasting
@@ -1328,14 +1330,14 @@ element_ids = parcels.dataset.element_id.values
 recycle = parcels.dataset["recycle_destination"].values
 
 
-np.savez("All_3.npz", mask_here=mask_here, time_arrival=time_arrival, volumes=volumes,current_link=current_link, this_links_parcels=this_links_parcels,
+np.savez("All_scenario3.npz", mask_here=mask_here, time_arrival=time_arrival, volumes=volumes,current_link=current_link, this_links_parcels=this_links_parcels,
           time_arrival_sort=time_arrival_sort,
           parcel_id_time_sorted=parcel_id_time_sorted, vol_ordered_filo=vol_ordered_filo, cumvol_orderedfilo=cumvol_orderedfilo,
           effectiveheight_orderedfilo=effectiveheight_orderedfilo, source_orderedfilo=source_orderedfilo, active_orderedfilo=active_orderedfilo,
         location_in_link_orderedfilo=location_in_link_orderedfilo, D_orderedfilo=D_orderedfilo)
 
 
-np.savez("P_3.npz", sediment_active_percent=sediment_active_percent, num_pulse_each_link_DS=num_pulse_each_link_DS, 
+np.savez("P_scenario3.npz", sediment_active_percent=sediment_active_percent, num_pulse_each_link_DS=num_pulse_each_link_DS, 
          num_total_parcels_each_link_DS=num_total_parcels_each_link_DS, num_active_pulse_nozero_DS=num_active_pulse_nozero_DS, 
          vol_pulse_nozero_DS=vol_pulse_nozero_DS, vol_nozero_DS=vol_nozero_DS, D_mean_pulse_each_link_nozero_DS=D_mean_pulse_each_link_nozero_DS,
          percent_active_pulse_DS=percent_active_pulse_DS, percent_active_DS=percent_active_DS, Elev_change_DS=Elev_change_DS, Sed_flux=Sed_flux,

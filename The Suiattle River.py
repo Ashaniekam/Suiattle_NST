@@ -4,8 +4,7 @@ Spyder Editor
 
 This is the code for my thesis on the Suiattle River
 
-Tasks/Issues 2-7-25:
-    - Why is transport_capacity not DS?
+
    
 @author: longrea, pfeiffea
 
@@ -55,9 +54,9 @@ else:
     model_state = "4_times SHRS proxy"
 
 # ##### Basic model parameters 
-timesteps = 200
+timesteps = 20
 pulse_time = 2
-num_hours_each_time = 24
+num_hours_each_time = 8
 dt = 60*60*num_hours_each_time*1  # len of timesteps 
 
 n_lines = 10 # note: # timesteps must be divisible by n_lines with timesteps%n_lines == 0
@@ -257,7 +256,6 @@ nst = NetworkSedimentTransporter(
 # %% Setup for plotting during/after loop
 
 #variables needed for plots
-#Pulse_cum_transport = []
 
 # Tracked for each timestep
 n_recycled_parcels = np.ones(timesteps)*np.nan
@@ -298,6 +296,7 @@ Elev_change_DS = np.empty([grid.number_of_nodes,timesteps]) # 2d array of elevat
 
 
 # %% Pulse element variables
+#determine number of pulse parcels
 fan_thickness = np.array([3.0, 6.25, 6.25, 5.75, 2.75, 1.25]) #meters
 fan_location= np.array([6, 7, 8, 9, 10, 11])
 pulse_parcel_vol = 25 #volume of each parcel m^3 - edited 1/9/25
@@ -311,17 +310,16 @@ total_num_initial_pulse_parcels = int(np.sum(initial_num_pulse_parcels_by_vol))
 
 total_num_added_pulse_parcels = 0
 
-## distribute the total_num_pulse_parcels proportional to fan thickness instead of evenly -- needs clean up
+## distribute the total_num_pulse_parcels proportional to fan thickness instead of evenly
 fan_proportions = fan_thickness / fan_thickness.sum()
-
 # Distribute total_num_pulse_parcels according to the proportions
 pulse_each_fan_link = (fan_proportions * total_num_pulse_parcels).astype(int) #
-
 # Calculate the remainder due to integer conversion
-remainder = total_num_pulse_parcels - pulse_each_fan_link.sum()
+remainding_pulse = total_num_pulse_parcels - pulse_each_fan_link.sum()
+pulse_each_fan_link[np.argmax(fan_proportions)] += remainding_pulse
 
-# Add the remainder to the largest element in pulse_each_link
-pulse_each_fan_link[np.argmax(fan_proportions)] += remainder
+
+#pulse variables
 
 pulse_location = [index for index, freq in enumerate((pulse_each_fan_link).astype(int), start= np.min(fan_location)) for _ in range(freq)]
 
@@ -368,27 +366,23 @@ scaled_gsd = np.resize(Suiattle_gsd_m, scaled_size)
 sorted_scaled_gsd = np.sort(scaled_gsd)
 scaled_count = np.linspace(0,100,len(scaled_gsd))
 
-num_rows = np.shape(newpar_element_id)[0]
-
 new_D = np.empty(((np.shape(newpar_element_id)[0]), 1), dtype=float)
 
 # Filter values in GSD that are less than 0.5
 truncated_GSD = scaled_gsd[scaled_gsd < 0.5]
-#truncated_GSD = grain_sizes[grain_sizes < 0.5]
 
 new_D[:,0] = truncated_GSD[:total_num_pulse_parcels]
-#total_num_pulse_moved = 0
 
 count = np.linspace(0,100,len(Suiattle_gsd_m))
 
-# Plot scaled G
+# Plot of orginal GSD and scaled GSD (plots overlap)
 plt.semilogx(np.sort(Suiattle_gsd_m),count, color ="blue")
-plt.plot(np.log(sorted_scaled_gsd),scaled_count, color= "red")
+plt.semilogx(np.sort(scaled_gsd),scaled_count, color ="blue")
 plt.xlabel('Grain Size (log scale)')
 plt.ylabel('Cumulative % Finer')
 plt.show()
 
-# %% Abrasion scenarios using Allison's field data
+# %% Abrasion scenarios using Pfeiffer et al., 2022 field data
 field_data = pd.read_excel((os.path.join(os.getcwd (), ("SuiattleFieldData_Combined20182019.xlsx"))), sheet_name = '4-SHRSdfDeposit', header = 0)
 SHRS = field_data['SHRS median'].values
 SHRS_MEAN = np.mean(SHRS)
@@ -396,29 +390,28 @@ SHRS_STDEV = np.std(SHRS)
 
 SHRS_distribution = np.random.normal(SHRS_MEAN, SHRS_STDEV, (np.size(newpar_element_id)))
 
-SHRS_distribution[SHRS_distribution<20]=20 # 9/10/24 - Hard coding this to prevent occasional VERY weak values. Min set to just below observed min (SHRS = 24)
+SHRS_distribution[SHRS_distribution<20]=20  # Hard coded to prevent occasional VERY weak values. Min set to just below observed min (SHRS = 24)
 
 measured_alphas = np.exp(1.122150830896329)*np.exp(-0.13637476779600016 *SHRS_distribution) # units: 1/km
  
-
+# tumbler correction factors
 tumbler_2 = 2 * measured_alphas
 tumbler_4 = 4 * measured_alphas
 
 
 if scenario == 1:
     new_abrasion_rate = 0 * np.ones(np.size(newpar_element_id))
-    new_density = 2650 * np.ones(np.size(newpar_element_id))  # (kg/m3) standard
+    new_density = 2650 * np.ones(np.size(newpar_element_id))  # (kg/m3) standard rock density
     print('Scenario 1 pulse: no abrasion')
 elif scenario == 2:
-    new_abrasion_rate = (measured_alphas/1000)* np.ones(np.size(newpar_element_id)) #0.3 % mass loss per METER
+    new_abrasion_rate = (measured_alphas/1000)* np.ones(np.size(newpar_element_id)) 
     new_density = 928.6259337721524*np.log(SHRS_distribution) + (-1288.1880919573282)
-    #new_density = 894.978992640976*np.log(SHRS_distribution)-1156.7599235065895
     print('Scenario 2 pulse: variable abrasion, SH proxy')
 else: 
-    new_abrasion_rate = (tumbler_4/1000)* np.ones(np.size(newpar_element_id)) #tumbler correction 4 !!!!
+    new_abrasion_rate = (tumbler_4/1000)* np.ones(np.size(newpar_element_id)) 
     new_density = 928.6259337721524*np.log(SHRS_distribution) + (-1288.1880919573282)
     print('Scenario 3 pulse: variable abrasion, 4 * SH proxy')
-    #new_density = 894.978992640976*np.log(SHRS_distribution)-1156.7599235065895
+    
 
 flat_new_D = new_D.reshape(-1)
 new_abrasion_rate[flat_new_D < 0.002] = 0
@@ -434,13 +427,12 @@ writer.setup(figAnim,gif_name)
 # %% Model run
 
 for t in range(0, (timesteps*dt), dt):
-    #by index of original sediment
     start_time = model_time.time()
     
     day_timestep = t/(60*60*24)
     if day_timestep % 20 == 0:
         discharge = discharge * 2.5
-        print("Used the 0.1% exceedence flow for discharge")
+        print("0.1% exceedence flow for discharge")
     
     else:
         discharge = (0.2477 * area_link) + 8.8786
@@ -511,10 +503,6 @@ for t in range(0, (timesteps*dt), dt):
         
     else:
          print("There are no recycled parcels in this timestep.")
-         
-    
-    
-    
 # %% ########## Making a pulse #############  
     mask_ispulse = parcels.dataset.source == 'pulse'
    
@@ -574,11 +562,6 @@ for t in range(0, (timesteps*dt), dt):
                 new_pulse_location = [index for index, freq in enumerate((num_parcels_add_to_fan_now).astype(int), start= np.min(fan_location)) for _ in range(freq)]
                 
                 print("The number of pulse added to each link is ", num_parcels_add_to_fan_now)
-                #####Check that the values match num_parcels_add_to_fan_now
-                unique_values, counts = np.unique(new_pulse_location, return_counts=True)
-                # Print the frequency
-                for value, freq in zip(unique_values, counts):
-                    print(f"The link {value} occurs {freq} times")
                 
                 new_starting_link = np.squeeze(new_pulse_location) 
                 
@@ -630,7 +613,6 @@ for t in range(0, (timesteps*dt), dt):
         continue
 # %% Run one timestep    
     
-    # #######   Ta da!    #########     
     nst.run_one_step(dt)
 
     
@@ -674,7 +656,7 @@ for t in range(0, (timesteps*dt), dt):
     
 
     #Tracking timesteps
-    print("Model time: ", t/(60*60*24), " * 6 hours passed (", t/dt, 'timesteps)')
+    print("Model time: ", t/(60*60*24), " * 8 hours passed (", t/dt, 'timesteps)')
     print('Elapsed:', (model_time.time() - start_time)/60 ,' minutes')
     
     # Print some pertinent information about the model run
@@ -737,7 +719,6 @@ for t in range(0, (timesteps*dt), dt):
   
     sed_total_vol[:,np.int64(t/dt)] = grid.at_link["sediment_total_volume"][index_sorted_area_link]
     
-    #### TRYING TO GET RID OF WARNINGS
     # Create a mask where sed_total_vol is non-zero
     mask_sed_vol = sed_total_vol[:, np.int64(t/dt)] != 0
 
@@ -848,8 +829,7 @@ vol_nozero_DS[vol_nozero_DS == 0]= np.nan
 D_mean_pulse_each_link_nozero_DS= D_mean_pulse_each_link_DS.copy()
 D_mean_pulse_each_link_nozero_DS[D_mean_pulse_each_link_nozero_DS == 0]= np.nan
 
-# %% ??? Why here?
-pulse_ids = parcels.dataset.element_id.values[mask_ispulse]
+# %% variables for plots below
 
 mask_active_pulse = np.nan_to_num(num_pulse_each_link, nan=0.0) != 0 # Replace NaNs with zeros and create a mask where the denominator is non-zero
 
@@ -869,8 +849,6 @@ percent_active[mask_active_parcels] = num_active_parcels_each_link[mask_active_p
 percent_active_DS = percent_active[index_sorted_area_link] 
 percent_active_DS[percent_active_DS == 0]= np.nan
 
-# %% ????? Random
-
 # final volume of sediment on each link
 final_vol_on_link = np.empty(number_of_links, dtype = float)
 final_vol_on_link= aggregate_items_as_sum(
@@ -885,11 +863,6 @@ Final_vol_on_link_DS = final_vol_on_link[index_sorted_area_link]
 elev_change_at_link = ((final_vol_on_link - initial_vol_on_link) /
                         (grid.at_link["reach_length"]*grid.at_link["channel_width"]))  # volume change in link/ link bed area
 
-# scenario_data['elevation_change'][scenario - 1].append(Elev_change[:, 2])
-# scenario_data['percent_active_pulse'][scenario - 1].append(percent_active_pulse_DS[:, -1])
-# scenario_data['D_mean_pulse_each_link'][scenario - 1].append(D_mean_pulse_each_link_DS[:, -1])
-# scenario_data['volume_pulse_at_each_link'][scenario - 1].append(volume_pulse_at_each_link_DS[:, -1])
-# scenario_data['percent_pulse_remain'][scenario - 1].append(percent_pulse_remain)
 
 # %% All the Pcolor plots
 
@@ -953,10 +926,7 @@ variables = {
     'percent_active_pulse_DS': percent_active_pulse_DS,
     'percent_active_DS': percent_active_DS,
     'Elev_change_DS': Elev_change_DS,
-    #'transport_capacity': Sed_flux,
-    #'transport_capacity_limited': Sed_flux,
 }
-
 # Define colorbar labels with new names
 colorbar_labels = {
     'num_pulse_each_link_DS': 'Number of pulse parcel',
@@ -968,10 +938,9 @@ colorbar_labels = {
     'percent_active_pulse_DS': 'Fraction of active pulse parcels',
     'percent_active_DS': 'Fraction of active parcels',
     'Elev_change_DS': 'Elevation change from initial (m)',
-    #'transport_capacity': 'Transport rate ($m^3$/s)',
-    #'transport_capacity_limited': 'Transport rate ($m^3$/s)',
+
 }
-# Define plot titles with new names
+
 plot_titles = {
     'num_pulse_each_link_DS': f"Number of total pulse parcels (Scenario = {scenario})",
     'num_total_parcels_each_link_DS': f"Number of total parcels (Scenario = {scenario})",
@@ -982,11 +951,7 @@ plot_titles = {
     'percent_active_pulse_DS': f"Fraction of active pulse parcels (Scenario = {scenario})",
     'percent_active_DS': f"Fraction of  active parcels (Scenario = {scenario})",
     'Elev_change_DS': f"Elevation change (Scenario = {scenario})",
-    #'transport_capacity': f"Transport capacity (Scenario = {scenario})",
-    #'transport_capacity_limited': f"Transport capacity limited (Scenario = {scenario})",
 }
-
-# Define plot names with new names
 plot_names = {
     'num_pulse_each_link_DS': f"{new_dir}/TotalPulseParcel(Scenario{scenario_num}).png",
     'num_total_parcels_each_link_DS': f"{new_dir}/Total_parcel(Scenario{scenario_num}).png",
@@ -997,11 +962,7 @@ plot_names = {
     'percent_active_pulse_DS': f"{new_dir}/fraction_active_pulse(Scenario{scenario_num}).png",
     'percent_active_DS': f"{new_dir}/Fraction_Active (Scenario{scenario_num}).png",
     'Elev_change_DS': f"{new_dir}/TrackElevChange(Scenario{scenario_num}).png",
-    #'transport_capacity': f"{new_dir}/transport_capacity(Scenario{scenario_num}).png",
-    #'transport_capacity_limited': f"{new_dir}/transport_capacity_limited(Scenario{scenario_num}).png",
 }
-
-# Define colormaps with new names
 cmap = {
     'num_pulse_each_link_DS': 'inferno',
     'num_total_parcels_each_link_DS': 'inferno',
@@ -1009,12 +970,9 @@ cmap = {
     'vol_pulse_nozero_DS': 'plasma_r',
     'vol_nozero_DS': 'plasma_r',
     'D_mean_pulse_each_link_nozero_DS': 'winter_r',
-    #'D_mean_change_each_link_nozero_DS': 'winter_r',
     'percent_active_pulse_DS': 'Wistia',
     'percent_active_DS': 'Wistia',
     'Elev_change_DS': 'RdBu',
-    #'transport_capacity': 'viridis',
-    #'transport_capacity_limited': 'viridis',
 }
 
 norm = {
@@ -1024,12 +982,9 @@ norm = {
     'vol_pulse_nozero_DS': matplotlib.colors.LogNorm(),
     'vol_nozero_DS': matplotlib.colors.LogNorm(),
     'D_mean_pulse_each_link_nozero_DS': matplotlib.colors.LogNorm(vmin=0.005),
-    #'D_mean_change_each_link_nozero_DS': matplotlib.colors.LogNorm(vmin=0.01, vmax=0.1),
     'percent_active_pulse_DS': matplotlib.colors.Normalize(vmin=0.0, vmax=1.0),
     'percent_active_DS': matplotlib.colors.Normalize(vmin=0.0, vmax=1.0),
     'Elev_change_DS': colors.CenteredNorm(),
-    #'transport_capacity': None,
-    #'transport_capacity_limited': matplotlib.colors.Normalize(vmin=0.00, vmax=0.100),
 }
 
 # Plot for all time
@@ -1043,17 +998,13 @@ for var_name, data in variables.items():
         mesh = plt.pcolor(days, dist_downstream_DS, data, shading='auto', cmap=cmap[var_name], norm=norm[var_name] if norm[var_name] is not None else None)
         
     x_right_edge = plt.gca().get_xlim()[1]
-    #canyonline = plt.plot(np.ones(len(canyon_reaches))*x_right_edge,dist_downstream_DS[canyon_reaches],color='grey')
-    # canyonline[0].set_clip_on(False)
-    #plt.text(x_right_edge, 40, 'Canyon Reaches', rotation=90, va='center', ha='left', color='grey')
     pulseline = plt.plot(np.ones(len(fan_location))*x_right_edge*1.005,dist_downstream_DS[fan_location],color='red')
     pulseline[0].set_clip_on(False)
     
     plt.text(x_right_edge*1.01, 7, "Pulse", rotation= 90, va= 'center', ha= 'left', color='red')
     plt.axis([days[0],num_days,0,max(dist_downstream_nodes_DS)])
     plt.axvline(x=pulse_time*(dt/(60*60*24)), color='gray', linestyle='--', linewidth=1.5, label=f'Day {pulse_time}')
-
-    
+   
     mesh.set_array(data)
     plt.colorbar(mesh, label=colorbar_labels[var_name])
     plt.title(plot_titles[var_name])
@@ -1062,44 +1013,12 @@ for var_name, data in variables.items():
     plt.savefig(plot_names[var_name], dpi= 700)
     plt.show()    
 
-# #Plot since steady state
-# for var_name_ss, data_ss in variables.items():
-#     plt.figure()
-#     if "pulse" not in var_name_ss:
-#         shortened_variable = data_ss[:, pulse_time-1:]
-#         steady_state_values = data_ss[:, pulse_time-1]
-#         normalized_variable = shortened_variable - steady_state_values[:, np.newaxis]
-#         if var_name_ss == 'Elev_change':  # Special handling for Elev_change
-#             mesh_ss = plt.pcolor(time_array_ss, dist_downstream_nodes, normalized_variable, shading='auto', cmap=cmap[var_name_ss], norm=norm[var_name_ss])
-#         else:
-#             mesh_ss = plt.pcolor(time_array_ss, dist_downstream, normalized_variable, shading='auto', cmap=cmap[var_name_ss], norm=norm[var_name_ss] if norm[var_name_ss] is not None else None)
-#     else:
-#         continue
-    
-#     x_right_edge = plt.gca().get_xlim()[1]
-#     canyonline = plt.plot(np.ones(len(canyon_reaches))*x_right_edge,dist_downstream[canyon_reaches],color='grey')
-#     canyonline[0].set_clip_on(False)
-#     plt.text(x_right_edge, 40, 'Canyon Reaches', rotation=90, va='center', ha='left', color='grey')
-#     pulseline = plt.plot(np.ones(len(fan_location))*x_right_edge,dist_downstream[fan_location],color='red')
-#     pulseline[0].set_clip_on(False)
-#     plt.text(x_right_edge, 10, "Pulse", rotation= 90, va= 'center', ha= 'left', color='red')
-#     plt.axis([1,timesteps,0,max(dist_downstream_nodes)])  
-#     mesh_ss.set_array(normalized_variable)
-#     plt.colorbar(mesh_ss, label=colorbar_labels[var_name_ss])
-#     plt.title('SS_' + plot_titles[var_name_ss])
-#     plt.xlabel("Timesteps")
-#     plt.ylabel("Distance downstream  (km)")
-#     plt.show()  
-
 
 # %% Misc other plots
-# ######### Plots ###########
-
 # #### Total pulse volume through time (constant for no-abrasion, until parcels exit)
 plt.figure(dpi=600,figsize=(6,2))
 
 plt.stackplot(days,vol_pulse_on,vol_pulse_exited,vol_pulse_abraded, colors = ['k','darkorange','darkgrey'])
-
 
 plt.ylim(0,np.nanmax(vol_pulse_on + vol_pulse_exited + vol_pulse_abraded))
 plt.xlim(0,np.max(days)) 
@@ -1177,8 +1096,6 @@ plt.title('Initial and final pulse grain size CDF (source=pulse)')
 plt.grid(True, linestyle='--', alpha=0.6)
 plt.xscale('log')
 plt.xlim(0.002,1)
-# plot_name = str(new_dir) + "/" + 'GSD (Scenario' + str(scenario_num) + ').png'
-# plt.savefig(plot_name)
 plt.legend()
 plt.show()
 
@@ -1220,56 +1137,6 @@ plt.ylabel("Slope")
 plt.xlabel("Distance downstream (km)")
 plt.legend()
 plt.show()
-
-# # #NST plots
-
-
-# # grid.add_field("elevation_change", elev_change_at_link, at="link", units="m", copy=True, clobber=True)
-# # grid.add_field("change_D", grain_size_change, at="link", units="m", copy=True, clobber=True)
-
-
-# # log_width = np.log(width)
-# # fig = plot_network_and_parcels(grid,parcels,parcel_time_index=0,link_attribute=('elevation_change'),parcel_alpha=0,network_linewidth=log_width, link_attribute_title= "Elevation Change in each reach (m)", network_cmap= "coolwarm")
-# # plot_name = str(new_dir) + "/" + 'NST_ELEVCHANGE(Scenario' + str(scenario_num) + ').jpg'
-# # fig.savefig(plot_name, bbox_inches='tight', dpi=700)
-
-
-# # #NST plots
-
-# # grid.add_field("elevation_change", elev_change_at_link, at="link", units="m", copy=True, clobber=True)
-# # log_width = np.log(width)
-
-# # fig, ax = plt.subplots(figsize=(10, 8))
-# # Suiattle_Dem = np.array(Suiattle_Dem)  # Ensure `Suiattle_Dem` is a NumPy array
-# # im_dem = ax.imshow(Suiattle_Dem, cmap='gist_gray', vmin=0, vmax=np.max(Suiattle_Dem))
-# # ax= plot_network_and_parcels(grid,parcels,parcel_time_index=0,link_attribute=('elevation_change'),parcel_alpha=0,network_linewidth=log_width, link_attribute_title= "Elevation Change in each reach (m)", network_cmap= "coolwarm")
-# # plt.colorbar(im_dem, ax=ax, label="Elevation (m)")
-# # plt.title("Suiattle DEM")
-# # plt.xlabel("Longitude")
-# # plt.ylabel("Latitude")
-
-
-# # fig, ax = plt.subplots(figsize=(10, 8))
-# # Suiattle_Dem = np.array(Suiattle_Dem)  # Ensure `Suiattle_Dem` is a NumPy array
-# # im_dem = ax.imshow(Suiattle_Dem, cmap='gist_gray', vmin=0, vmax=np.max(Suiattle_Dem))
-# # plt.colorbar(im_dem, ax=ax, label="Elevation (m)")
-# # plt.title("Suiattle DEM")
-# # plt.xlabel("Longitude")
-# # plt.ylabel("Latitude")
-
-# # fig.savefig(plot_name, bbox_inches='tight', dpi=700)
-
-# plt.figure()
-# plt.hist(np.log10(SHRS_proxy), color = "blue", label= "SHRS Proxy")
-# plt.hist(np.log10(Double_SHRS), color= "red", alpha= 0.7, label= "Double SHRS Proxy")
-# plt.ylabel("Number of pulse parcels")
-# plt.xlabel("Log10 Abrasion rate (1/m)")
-# plt.legend()
-
-
-# # fig =plot_network_and_parcels(grid,parcels,parcel_time_index=0, link_attribute=('change_D'),parcel_alpha=0, link_attribute_title="Diameter [m]", network_cmap= "coolwarm")
-
-# %% GIF within a link parcels
 
 # %% GIF within a link parcels
 
@@ -1365,8 +1232,7 @@ np.savez("P_scenario3.npz", sediment_active_percent=sediment_active_percent, num
 # Saving a text file of model characteristics
 timestep_in_days = dt/86400
 # Converting the time in seconds to a timestamp
-#c_ti = model_time.ctime(os.path.getctime("NST_Suiattle_Before pickel_Nov14.py"))
-text_file = os.path.join(new_dir, 'TESTING ('+scenario_num+ ').txt')   
+text_file = os.path.join(new_dir, 'Run ('+scenario_num+ ').txt')   
 file = open('Suiattle_run_characteristics'+scenario_num+ ').txt', 'w')
 model_characteristics = ["This code is running for scenario %s" %scenario,  "This is the tau_c_multiplier %s" %tau_c_multiplier, 
                           "This is the number of timesteps %s" %timesteps, "The number of days in each timestep is %s" % timestep_in_days, # length of dt in days
@@ -1379,27 +1245,3 @@ for line in model_characteristics:
     file.write(line)
     file.write('\n')
 file.close()
-
-# %% Pickle
-
-# #Pickle the whole NST!
-# nst_path = output_folder+"/"+new_dir_name+'--nst.pickle'
-
-# with open(nst_path, 'wb') as file:
-#     # Serialize and write the variable to the file
-#     pickle.dump(nst, file)
-
-# parcel_path = output_folder+"/"+new_dir_name+'--parcels.pickle'
-
-# with open(parcel_path, 'wb') as file:
-#     # Serialize and write the variable to the file
-#     pickle.dump(parcels, file)
-
-#Editing and saving variables in DataRecord and csv file
-# parcel_data = parcels.dataset.to_dataframe()
-# parcel_data.to_csv('Parcels_saved_data.csv', sep=',', index=True)
-
-## Note to self: open these via...
-
-# with open(file_path, 'rb') as file:
-#     parcels = pickle.load(file)

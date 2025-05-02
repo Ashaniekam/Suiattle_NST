@@ -943,7 +943,7 @@ variables = {
 }
 # Define colorbar labels with new names
 colorbar_labels = {
-    'sediment_active_percent': 'average % active parcels',
+    'sediment_active_percent': 'Average % active parcels',
     'num_pulse_each_link_DS': 'Number of pulse parcel',
     'num_total_parcels_each_link_DS': 'Number of parcels',
     'num_active_pulse_nozero_DS': 'Number of active pulse parcels',

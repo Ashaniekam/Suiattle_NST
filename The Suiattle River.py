@@ -428,7 +428,10 @@ newer_pulse_D_by_timestep = {}
 # %% Animation start
 # Initiate an animation writer using the matplotlib module, `animation`.
 figAnim, axAnim = plt.subplots(1, 1)
-writer = animation.FFMpegWriter(fps=6)
+#writer = animation.FFMpegWriter(fps=6)
+
+Writer = animation.writers['pillow']
+writer = Writer(fps=6)
 
 gif_name = output_folder +"/"+ new_dir_name + "--Elev_through_time.gif"
 writer.setup(figAnim,gif_name)
@@ -1170,8 +1173,12 @@ for link in np.array([10,11,12,13,14,15,16,17, 18, 19, 20]):#range(16):#range(gr
     if not os.path.exists(output_folder):
         os.mkdir(output_folder)
     # Initiate an animation writer using the matplotlib module, `animation`.
-    figPulseAnim, axPulseAnim = plt.subplots(1, 1, dpi=600)
-    writer = animation.FFMpegWriter(fps=20)
+    figPulseAnim, axPulseAnim = plt.subplots(1, 1, dpi=300)
+    #writer = animation.FFMpegWriter(fps=20)
+    
+    Writer = animation.writers['pillow']
+    writer = Writer(fps=20)
+    
     gif_name = output_folder +"/"+ scenario_num + "Test Wiggle" + str(link) +".gif"
     writer.setup(figPulseAnim,gif_name)
     for tstep in np.arange(0,timesteps,5):#range(timesteps):

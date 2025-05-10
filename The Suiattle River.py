@@ -453,18 +453,17 @@ for t in range(0, (timesteps*dt), dt):
     
     # Masking parcels
     
-    #boolean mask of parcels that are initial bed parcels (no pulse parcels)
-    mask2 = parcels.dataset.source == "initial_bed_sed" 
     #boolean mask of parcels that have left the network
     mask1 = parcels.dataset.element_id.values[:,-1] == OUT_OF_NETWORK
-    mask1_v2 = parcels.dataset.element_id.values[mask2,-1] == OUT_OF_NETWORK
+    #boolean mask of parcels that are initial bed parcels (no pulse parcels)
+    mask2 = parcels.dataset.source == "initial_bed_sed" 
     
-    mask_combined = (parcels.dataset.element_id.values[:, -1] == OUT_OF_NETWORK) & (parcels.dataset.source == "initial_bed_sed")
+    
     bed_sed_out_network = parcels.dataset.element_id.values[mask1 & mask2, -1] == -2
     
     
     #index of the bed parcels that have left the network
-    index_exiting_parcels = np.where(mask1 == True) 
+    index_exiting_parcels = np.where(bed_sed_out_network == True) 
     print("Number of recycling parcels is: ", np.size(index_exiting_parcels))
     
     #number of parcels that will be recycled
@@ -892,6 +891,7 @@ plt.pcolor(days, dist_downstream_DS, Sand_fraction_active [index_sorted_area_lin
 plt.colorbar(label= "Sand fraction")
 plt.xlabel('Days')
 plt.ylabel('Distance downstream (km)')
+plt.axvline(x=pulse_time*(dt/(60*60*24)), color='gray', linestyle='--', linewidth=1.5, label=f'Day {pulse_time}')
 plot_name = str(new_dir) + "/" + 'Sand_frac(Scenario' + str(scenario_num) + ').png'
 plt.savefig(plot_name)
 plt.show()
@@ -908,6 +908,7 @@ plt.figure(dpi=600)
 plt.pcolor(days, dist_downstream_DS, Slope_through_time_DS, cmap = 'RdBu', norm = colors.CenteredNorm())
 plt.colorbar(label= "Change in Slope")
 plt.xlabel('Days')
+plt.axvline(x=pulse_time*(dt/(60*60*24)), color='gray', linestyle='--', linewidth=1.5, label=f'Day {pulse_time}')
 plt.ylabel("Distance downstream (km)")
 plot_name = str(new_dir) + "/" + 'slope_change (Scenario' + str(scenario_num) + ').png'
 plt.savefig(plot_name)
@@ -926,8 +927,20 @@ plt.figure(dpi=600)
 plt.pcolor(days, dist_downstream_DS, Change_D50s_each_link_DS, cmap = 'PuOr', norm = colors.CenteredNorm(halfrange=0.3) )
 plt.colorbar(label= "D50s change (m)")
 plt.xlabel('Days')
+plt.axvline(x=pulse_time*(dt/(60*60*24)), color='gray', linestyle='--', linewidth=1.5, label=f'Day {pulse_time}')
 plt.ylabel("Distance downstream (km)")
 plot_name = str(new_dir) + "/" + 'D50s_change (Scenario' + str(scenario_num) + ').png'
+plt.savefig(plot_name)
+plt.show()
+
+
+plt.figure(dpi=600)
+plt.pcolor(days, dist_downstream_nodes_DS, Elev_change_DS, cmap = 'RdBu', norm = colors.CenteredNorm(halfrange=1.5) )
+plt.colorbar(label= "Elevation change from initial (m)")
+plt.xlabel('Days')
+plt.axvline(x=pulse_time*(dt/(60*60*24)), color='gray', linestyle='--', linewidth=1.5, label=f'Day {pulse_time}')
+plt.ylabel("Distance downstream (km)")
+plot_name = str(new_dir) + "/" + 'ELevhalfrange_change (Scenario' + str(scenario_num) + ').png'
 plt.savefig(plot_name)
 plt.show()
 

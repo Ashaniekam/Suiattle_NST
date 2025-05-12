@@ -7,7 +7,7 @@ The pulse is added at timestep 200
 initial_num_pulse_parcels_by_vol [ 648.2384974  1117.10870235  820.34987433 1267.64179149  702.2861615
   322.09463422]
 The volume of each pulse parcel is 25
-This is the number of pulse parcels added to the network 36496
-num_pulse_left= 459
-max ele 9.481986498959259
+This is the number of pulse parcels added to the network 36573
+num_pulse_left= 9004
+max ele 9.377185720633634
 The current stage of this code is editing variables to be normalized since steady state.

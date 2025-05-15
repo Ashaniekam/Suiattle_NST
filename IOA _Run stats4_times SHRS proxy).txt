@@ -1,0 +1,13 @@
+This code is running for scenario 3
+total_num_initial_pulse_parcels 4877
+This is the tau_c_multiplier 2.4
+This is the number of timesteps 2000
+The number of days in each timestep is 0.3333333333333333
+The pulse is added at timestep 200
+initial_num_pulse_parcels_by_vol [ 648.2384974  1117.10870235  820.34987433 1267.64179149  702.2861615
+  322.09463422]
+The volume of each pulse parcel is 25
+This is the number of pulse parcels added to the network 60654
+num_pulse_left= 212527
+max ele 9.564401911155983
+The current stage of this code is editing variables to be normalized since steady state.

@@ -41,7 +41,7 @@ OUT_OF_NETWORK = NetworkModelGrid.BAD_INDEX - 1
 # %% Basic model setup and knobs 
 
 # #### Selecting abrasion/density scenario #####
-scenario = 2
+scenario = 3
 
 if scenario == 1:
     scenario_num = "none"
